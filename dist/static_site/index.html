@@ -953,6 +953,7 @@ var S = {noApi:STATIC_BUILD, lot:'ssq', tab:'list',
   listSort:{k:0,dir:-1}, listLimit:60,
   trendNum:1, trendScope:'month', distLimit:20,
   fSort:{red:{k:1,dir:1}, blue:{k:1,dir:1}},
+  freqWin:'all',
   heatWin:'month', heatSort:'num',
   pickRed:[], pickBlue:[],
   /* 中奖核对 */
@@ -995,7 +996,8 @@ function svgInk(){
     head:    d?'#8a8a8a':'#aaa',      /* 表头「期号/开奖日期」 */
     issue:   d?'#c8c8c8':'#666',
     date:    d?'#7d7d7d':'#aaa',
-    blueLbl: d?'#9a9a9a':'#999'
+    blueLbl: d?'#9a9a9a':'#999',
+    line:    d?'#4a4a4a':'#d8d8d8'   /* 红球区 / 蓝球区 分隔线 */
   };
 }
 /* 视口可用宽度：让 33/35 列尽量在一屏内放下，避免横滑 */
@@ -1206,23 +1208,41 @@ function renderTrend(){
   return h;
 }
 
-/* 历史号码分布图：行=日期，列=号码，只有圆点；支持加载更多 */
+/* 历史号码分布图：行=日期，列=号码；左侧 '+d.redLabel+' + 右侧 '+d.blueLabel+' 画在同一个图里 */
 function distChart(rows,d,total,lim){
-  var max=d.redMax, padL=54, headH=26;
+  var max=d.redMax, bmax=d.blueMax||0, padL=54, headH=38;  /* 头部加高，容纳分组标签 */
   var xr=padL-6;                        /* 左列统一右对齐位置 */
   var avail=vw()-26-2;
-  var cw=Math.max(11, Math.min(20, (avail-padL-6)/max));
+  var gap=12;                           /* 红球区与蓝球区之间的间隔 */
+  var cols=max+bmax;
+  var cw=Math.max(11, Math.min(20, (avail-padL-6-gap)/Math.max(1,cols)));
   var rh=Math.max(26, Math.min(30, cw+11));   /* 两行文字需更高行距 */
-  var H=headH+rows.length*rh+8, W=padL+max*cw+6;
+  var bx0=padL+max*cw+gap;                    /* 蓝球区起点 */
+  var H=headH+rows.length*rh+8, W=bx0+bmax*cw+6;
   var ink=svgInk();
+  var bcol=isDark()?'#5b8ff9':'#2b6cd4';
   var s='<div class="svgwrap" style="overflow-x:auto"><svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'">';
-  /* 顶部号码彩条 */
+  /* 顶部号码彩条：红球 */
   for(var n=1;n<=max;n++){
     var x=padL+(n-1)*cw;
     s+='<rect x="'+(x+0.5)+'" y="3" width="'+(cw-2)+'" height="18" rx="2" fill="'+numColor(n,max)+'"/>';
     s+='<text x="'+(x+cw/2)+'" y="'+(16)+'" font-size="8" fill="#fff" text-anchor="middle"'
       +' font-weight="600" pointer-events="none">'+n+'</text>';
   }
+  /* 顶部号码彩条：蓝球（同一张图，紧跟在红球右侧） */
+  for(var b0=1;b0<=bmax;b0++){
+    var bx=bx0+(b0-1)*cw;
+    s+='<rect x="'+(bx+0.5)+'" y="3" width="'+(cw-2)+'" height="18" rx="2" fill="'+bcol+'"/>';
+    s+='<text x="'+(bx+cw/2)+'" y="'+(16)+'" font-size="8" fill="#fff" text-anchor="middle"'
+      +' font-weight="600" pointer-events="none">'+b0+'</text>';
+  }
+  /* 分组标签：明确标出哪一段是红球、哪一段是蓝球（蓝球区在右侧，窄屏需左右滑动） */
+  s+='<text x="'+(padL+max*cw/2)+'" y="34" font-size="8.5" fill="'+ink.head+'" text-anchor="middle"'
+    +' font-weight="700" pointer-events="none">'+d.redLabel+' 1~'+max+'</text>';
+  if(bmax) s+='<text x="'+(bx0+bmax*cw/2)+'" y="34" font-size="8.5" fill="'+bcol+'" text-anchor="middle"'
+    +' font-weight="700" pointer-events="none">'+d.blueLabel+' 1~'+bmax+'</text>';
+  /* 红球区 / 蓝球区 之间的分隔线 */
+  if(bmax) s+='<rect x="'+(bx0-gap/2)+'" y="2" width="1" height="'+(H-4)+'" fill="'+ink.line+'" opacity=".55"/>';
   s+='<text x="'+xr+'" y="10" font-size="7.5" fill="'+ink.head+'" text-anchor="end">期号</text>';
   s+='<text x="'+xr+'" y="21" font-size="7.5" fill="'+ink.head+'" text-anchor="end">开奖日期</text>';
   /* 逐期 */
@@ -1235,6 +1255,7 @@ function distChart(rows,d,total,lim){
     /* 第二行：完整开奖日期（含年份） */
     s+='<text x="'+xr+'" y="'+(cy+9)+'" font-size="6.8" fill="'+ink.date+'" text-anchor="end">'
       +rows[i][1]+'</text>';
+    /* 红球圆点 */
     var arr=rows[i][2].slice().sort(function(a,b){return a-b});
     for(var k2=0;k2<arr.length;k2++){
       var cx=padL+(arr[k2]-1)*cw+cw/2, r=Math.min(cw,rh)/2-1.5;
@@ -1242,25 +1263,22 @@ function distChart(rows,d,total,lim){
       if(cw>=14) s+='<text x="'+cx+'" y="'+(cy+3.4)+'" font-size="8" fill="#fff" text-anchor="middle"'
         +' font-weight="700" pointer-events="none">'+arr[k2]+'</text>';
     }
-  }
-  s+='</svg></div>';
-  /* 蓝球条 */
-  var bw=Math.max(9,Math.min(16,(avail-padL-6)/d.blueMax));
-  var bh=20, bH=bh+6, bW=padL+d.blueMax*bw+6;
-  s+='<div class="svgwrap" style="overflow-x:auto"><svg width="'+bW+'" height="'+bH+'" viewBox="0 0 '+bW+' '+bH+'">';
-  s+='<text x="'+xr+'" y="'+(bh/2+4)+'" font-size="8.5" fill="'+ink.blueLbl+'" text-anchor="end">'+d.blueLabel+'</text>';
-  for(var b=1;b<=d.blueMax;b++){
-    var bx=padL+(b-1)*bw;
-    var hit=(rows[0][3][0]===b);
-    s+='<rect x="'+(bx+0.5)+'" y="2" width="'+(bw-2)+'" height="'+(bh-2)+'" rx="3"'
-      +' fill="'+(hit?'#2b6cd4':ink.blueOff)+'"/>';
-    s+='<text x="'+(bx+bw/2)+'" y="'+(bh/2+3.5)+'" font-size="8" fill="'+(hit?'#fff':ink.blueTxt)+'"'
-      +' text-anchor="middle" font-weight="'+(hit?'700':'400')+'">'+b+'</text>';
+    /* 蓝球圆点（同一行，画在红球右侧） */
+    var brr=(rows[i][3]||[]).slice().sort(function(a,b){return a-b});
+    for(var k3=0;k3<brr.length;k3++){
+      var bcx=bx0+(brr[k3]-1)*cw+cw/2, br=Math.min(cw,rh)/2-1.5;
+      s+='<circle cx="'+bcx+'" cy="'+cy+'" r="'+br+'" fill="'+bcol+'"/>';
+      if(cw>=14) s+='<text x="'+bcx+'" y="'+(cy+3.4)+'" font-size="8" fill="#fff" text-anchor="middle"'
+        +' font-weight="700" pointer-events="none">'+brr[k3]+'</text>';
+    }
   }
   s+='</svg></div>';
   s+='<div class="note">左两列＝<b>期号</b>（与开奖记录一致）与<b>开奖日期</b>；'
+    +'中间彩点为 <b>'+d.redLabel+' 1~'+max+'</b>，右侧蓝点为 <b>'+d.blueLabel+' 1~'+bmax+'</b>'
+    +'（两者在<b>同一个图</b>里，中间竖线为分界）。<br>'
+    +'<b>蓝球在红球右侧</b>，图较宽时可<b>左右滑动</b>查看蓝球区。<br>'
     +'当前显示最新 <b>'+rows.length+'</b> 期（'+rows[rows.length-1][0]+' '+rows[rows.length-1][1]
-    +' ~ '+rows[0][0]+' '+rows[0][1]+'）；下方色块标出最新一期'+d.blueLabel+'。</div>';
+    +' ~ '+rows[0][0]+' '+rows[0][1]+'）。</div>';
   /* 加载更多 */
   if(lim<total)
     s+='<button class="more" onclick="S.distLimit+=20;render()">加载更多（还有 '+(total-lim)+' 期）</button>';
@@ -1341,24 +1359,34 @@ function statLine(num,max,rowsWin,lab){
 function setNum(n){ S.trendNum=n; render(); }
 
 /* ---------- 出现次数 ---------- */
-function freqData(isBlue){
+function freqData(isBlue,win){
   var d=D[S.lot], max=isBlue?d.blueMax:d.redMax, key=isBlue?3:2, cnt=[];
+  var sc=scopeRows(win||S.freqWin||'all'), rows=sc.rows;
   for(var n=0;n<=max;n++) cnt[n]=0;
-  for(var i=0;i<d.rows.length;i++){
-    var arr=d.rows[i][key];
+  for(var i=0;i<rows.length;i++){
+    var arr=rows[i][key];
     for(var j=0;j<arr.length;j++) if(arr[j]>=0&&arr[j]<=max) cnt[arr[j]]++;
   }
-  var draws=d.rows.length, per=isBlue?d.blueCount:d.redCount, out=[];
-  for(var n2=1;n2<=max;n2++) out.push({num:n2,cnt:cnt[n2],pct:cnt[n2]/(draws*per)*100});
+  var draws=rows.length, per=isBlue?d.blueCount:d.redCount, out=[];
+  for(var n2=1;n2<=max;n2++) out.push({num:n2,cnt:cnt[n2],pct:draws?cnt[n2]/(draws*per)*100:0});
   return out;
 }
 function renderFreq(){
   var d=D[S.lot];
-  return '<div class="card"><div class="hint">默认按出现次数升序 ▲，点击表头切换排序字段与升降序</div>'
+  var win=S.freqWin||'all', sc=scopeRows(win), rows=sc.rows;
+  var h='<div class="card"><div class="bar"><label>窗口</label>'
+   +'<select onchange="S.freqWin=this.value;render()">'
+   +[['month','近一个月'],['year','近一年'],['all','全部历史']]
+     .map(function(o){return '<option value="'+o[0]+'"'+(win===o[0]?' selected':'')+'>'+o[1]+'</option>'}).join('')
+   +'</select>'
+   +'<label style="color:#aaa;font-size:12px">'+sc.label+' · <b>'+rows.length+'</b> 期</label></div>'
+   +'<div class="hint">默认按出现次数升序 ▲，点击表头切换排序字段与升降序；切换窗口后数据随之变化</div>'
    + freqBlock(false, d.redLabel+'（'+d.redMax+'个）','red')
    + freqBlock(true, d.blueLabel+'（'+d.blueMax+'个）','blue')
-   +'<div class="note">统计区间：'+d.rows[0][0]+' ~ '+d.rows[d.rows.length-1][0]
-   +'，共 '+d.rows.length+' 期。占比 = 出现次数 ÷ 该区总球位数。</div></div>';
+   +'<div class="note">统计区间：'+rows[0][0]+' ~ '+rows[rows.length-1][0]
+   +'，共 '+rows.length+' 期（'+sc.label+'）。占比 = 出现次数 ÷ 该区总球位数。<br>'
+   +'窗口越短样本越少，次数差异越大——这是随机波动，不代表冷热趋势。</div></div>';
+  return h;
 }
 function freqBlock(isBlue,title,tag){
   var rows=freqData(isBlue), so=S.fSort[tag];
@@ -1499,12 +1527,28 @@ function addBet(){
   var c=pickCheck();
   if(!c.ok){ alert(c.err.join('\n')); return; }
   var a=getBets();
-  a.push({r:S.pickRed.slice(), b:S.pickBlue.slice(), t:Date.now()});
+  a.push({r:S.pickRed.slice(), b:S.pickBlue.slice(), t:Date.now(), bought:0});
   saveBets(a); addRec(S.lot, a[a.length-1]); S.pickRed=[];S.pickBlue=[];
   render();
 }
 function delBet(i){ var a=getBets(); a.splice(i,1); saveBets(a); render(); }
 function clearBets(){ saveBets([]); render(); }
+/* 我的选号：标记「已购买」，单向不可撤销，并同步到选号记录里同一条（按保存时间匹配） */
+function toggleBetBought(i){
+  var a=getBets();
+  if(!a[i]) return;
+  if(a[i].bought){ if(typeof toast==='function') toast('已经标记为已购买，不能改回'); return; }
+  a[i].bought = 1;
+  saveBets(a);
+  /* 同步到记录：只置 1，绝不回退 */
+  var recs=getRecs(), t=a[i].t, changed=false;
+  for(var k=0;k<recs.length;k++){
+    if(recs[k].lot===S.lot && recs[k].t===t){ recs[k].bought=1; changed=true; break; }
+  }
+  if(changed) saveRecs(recs);
+  render();
+  if(typeof toast==='function') toast('已标记为已购买');
+}
 
 /* ---------- 我的选号记录（长期归档） ---------- */
 /* 与「我的选号」分开：选号是当期工作列表，会被清掉；记录长期保留，可回溯 */
@@ -1525,12 +1569,14 @@ function delRec(i){
   if(typeof toast==='function') toast('已删除');
 }
 function cancelRecDel(){ S.recDel=-1; S.recClear=false; render(); }
-/* 选号 ≠ 购买：默认记为「未购买」，真买了再点一下改成「已购买」 */
+/* 选号 ≠ 购买：默认记为「未购买」，真买了点「标记为已买」改成「已购买」，单向不可改回 */
 function toggleBought(i){
   var a=getRecs();
   if(!a[i]) return;
-  a[i].bought = a[i].bought?0:1;
+  if(a[i].bought){ if(typeof toast==='function') toast('已经标记为已购买，不能改回'); return; }
+  a[i].bought = 1;
   saveRecs(a); render();
+  if(typeof toast==='function') toast('已标记为已购买');
 }
 function clearRecs(){
   if(!S.recClear){ S.recClear=true; S.recDel=-1; render(); return; }
@@ -1556,7 +1602,8 @@ function fmtTs(t){
 }
 /* 筛选：彩种 / 购买状态 / 开奖状态 / 日期区间。返回原始下标，保证删除、标记仍对准 */
 function recFilterGet(){
-  if(!S.recF) S.recF={lot:'',buy:'',res:'',from:'',to:''};
+  /* 默认只显示「已购买」：选号不等于购买，没买的默认不占版面 */
+  if(!S.recF) S.recF={lot:'',buy:'1',res:'',from:'',to:''};
   return S.recF;
 }
 function recFiltered(){
@@ -1577,7 +1624,7 @@ function recFiltered(){
   return out;
 }
 function setRecF(k,v){ recFilterGet()[k]=v; S.recDel=-1; S.recClear=false; render(); }
-function resetRecF(){ S.recF={lot:'',buy:'',res:'',from:'',to:''}; S.recDel=-1; S.recClear=false; render(); }
+function resetRecF(){ S.recF={lot:'',buy:'1',res:'',from:'',to:''}; S.recDel=-1; S.recClear=false; render(); }
 function renderRecFilter(){
   var f=recFilterGet(), h='';
   h+='<div class="recf">';
@@ -1585,11 +1632,6 @@ function renderRecFilter(){
   var lots=[['','全部'],['ssq','双色球'],['dlt','大乐透'],['3d','福彩3D'],['pls','排列三']];
   for(var i=0;i<lots.length;i++)
     h+='<span class="'+(f.lot===lots[i][0]?'on':'')+'" onclick="setRecF(\'lot\',\''+lots[i][0]+'\')">'+lots[i][1]+'</span>';
-  h+='</div></div>';
-  h+='<div class="frow"><span class="flab">购买</span><div class="rdo">';
-  var buys=[['','全部'],['1','已购买'],['0','未购买']];
-  for(i=0;i<buys.length;i++)
-    h+='<span class="'+(f.buy===buys[i][0]?'on':'')+'" onclick="setRecF(\'buy\',\''+buys[i][0]+'\')">'+buys[i][1]+'</span>';
   h+='</div></div>';
   h+='<div class="frow"><span class="flab">开奖</span><div class="rdo">';
   var res=[['','全部'],['wait','待开奖'],['done','已开奖']];
@@ -1600,7 +1642,7 @@ function renderRecFilter(){
     +'<input type="date" class="dti" value="'+esc(f.from)+'" onchange="setRecF(\'from\',this.value)">'
     +'<span style="color:#aaa;padding:0 2px">至</span>'
     +'<input type="date" class="dti" value="'+esc(f.to)+'" onchange="setRecF(\'to\',this.value)"></div>';
-  var on = f.lot||f.buy||f.res||f.from||f.to;
+  var on = f.lot||f.res||f.from||f.to;   /* buy 恒为已购买，不算筛选条件 */
   h+='<div class="btns" style="margin-top:2px">'
     +'<button class="g" onclick="resetRecF()">'+(on?'清除筛选':'重置')+'</button></div>';
   h+='</div>';
@@ -1612,8 +1654,9 @@ function renderRec(){
     +'<div style="font-size:12px;color:#888;padding:0 12px 8px">'
     +'每次添加的选号都会自动归档到这里并长期保留（存在本机浏览器，最多 500 条），'
     +'换设备或清理浏览器数据会丢失。<br>'
-    +'<b>选号不等于购买</b>：新记录默认「未购买」，真的买了请点「标记为已买」；'
-    +'没买的可点「删除」移除。</div>';
+    +'<b>选号不等于购买</b>：添加的选号默认「未购买」，真的买了请在「我的选号」里点'
+    +'<b>「标记为已买」</b>，标记后<b>不能改回</b>。<br>'
+    +'<b>这里只显示「已购买」</b>的记录——没买的不会出现在列表中。</div>';
   if(!recs.length)
     return h+'<div class="empty">还没有选号记录<br><span style="font-size:12px">'
       +'在「我的选号」里添加号码后会自动出现在这里</span></div>';
@@ -1636,7 +1679,7 @@ function renderRec(){
     +(idx.length===recs.length
         ? '共 <b>'+recs.length+'</b> 条记录'
         : '筛选出 <b>'+idx.length+'</b> 条（共 '+recs.length+' 条）')
-    +' · 已买 <b>'+bought+'</b> · 未买 <b>'+(idx.length-bought)+'</b>：'+sum+'</div>';
+    +'（均为已购买）：'+sum+'</div>';
   if(!idx.length)
     return h+'<div class="empty">没有符合条件的记录<br><span style="font-size:12px">'
       +'试试放宽筛选条件，或点「清除筛选」</span></div>';
@@ -1675,8 +1718,7 @@ function renderRec(){
         +'<button onclick="cancelRecDel()">取消</button></div>';
     else
       h+='<div class="betops" style="margin:8px 0 0">'
-        +'<button onclick="toggleBought('+i+')">'
-        +(isB?'改回「未购买」':'标记为已买')+'</button>'
+        +(isB?'':'<button onclick="toggleBought('+i+')">标记为已买</button>')
         +'<button class="delbtn" onclick="delRec('+i+')">删除</button></div>';
     h+='</div>';
   }
@@ -2346,8 +2388,9 @@ function renderMine(){
       +'<button onclick="showBetImage()">生成投注图片</button></div>';
   /* 中奖汇总 */
   if(bets.length){
-    var won=0, amt=0, pend=0;
+    var won=0, amt=0, pend=0, nb=0;
     for(var m=0;m<bets.length;m++){
+      if(bets[m].bought) nb++;
       var rr=betResult(bets[m]);
       if(rr.state==='wait'){ pend++; continue; }
       if(rr.p){ won++; if(rr.p.amt) amt+=rr.p.amt; }
@@ -2357,6 +2400,9 @@ function renderMine(){
     if(pend) sum+=' ⏳ <b>'+pend+'</b> 注待开奖';
     if(!won && !pend) sum=' 本轮均未中奖';
     h+='<div class="bres" style="margin:8px 12px 0">自动对比最新一期：'+sum+'</div>';
+    h+='<div class="bres" style="margin:6px 12px 0">已买 <b>'+nb+'</b> 注 · 未买 <b>'
+      +(bets.length-nb)+'</b> 注<span style="opacity:.75">（添加选号默认「未购买」；'
+      +'点「标记为已买」后<b>不能改回</b>）</span></div>';
   }
   for(var b=0;b<bets.length;b++){
     var bet=bets[b], r={2:bet.r,3:bet.b}, a=analyze(bet.r,bet.b);
@@ -2365,10 +2411,15 @@ function renderMine(){
       +(rbOverlap(r)?' · <span style="color:#c33">'+d.blueLabel+'与'+d.redLabel+'有重合</span>':'')+'</div>';
     /* ① 自动核对结果 */
     h+=betResHtml(bet);
+    /* ①-2 购买状态 */
+    var isB2=bet.bought?1:0;
+    h+='<div style="margin-top:6px"><span class="buyflag '+(isB2?'on':'')+'">'
+      +(isB2?'✅ 已购买':'⚪ 未购买')+'</span></div>';
     /* ② 复制 / 图片 */
     h+='<div class="betops">'
       +'<button onclick="copyBet('+b+')">复制这注</button>'
       +'<button onclick="showBetImage()">生成图片</button>'
+      +(isB2?'':'<button onclick="toggleBetBought('+b+')">标记为已买</button>')
       +'<button class="delbtn" onclick="delBet('+b+')">删除</button></div>';
     if(a.exact)
       h+='<div class="kv"><span class="tagline tag-hot">历史开出过</span>'
@@ -2477,7 +2528,9 @@ function showHelp(){
    +'<li><b>历史号码分布</b>：左侧分两行＝<b>期号</b>（与开奖记录完全一致）+ '
    +'<b>开奖日期</b>（含年份）；右侧列＝号码。'
    +'彩色圆点＝该期开出的号码（圆点内写号码，颜色与号码一致），空白＝未开出</li>'
-   +'<li>底部蓝球条标出<b>最新一期</b>的蓝球</li>'
+   +'<li><b>红球与蓝球画在同一个图里</b>：左边彩点＝'+'红球 1~33（或 1~35）'+'，'
+   +'右边蓝点＝<b>蓝球</b> 1~16（或 1~12），中间一条竖线为分界；'
+   +'每一行的蓝点就是<b>当期</b>开出的蓝球</li>'
    +'<li>默认显示最新 <b>20 期</b>，点「加载更多」每次加 20 期，可展开到全部历史；'
    +'展开后按钮变「收起」。33 列较宽，窄屏可左右滑动</li>'
    +'<li><b>单号统计</b>：先选号码，再选范围（<b>近一个月 / 近一年 / 全部</b>）。'
@@ -2486,7 +2539,9 @@ function showHelp(){
    +'所选范围出现次数</li></ul>'
 
    +'<h4>出现次数</h4><ul>'
-   +'<li>统计全历史每个号码的<b>出现次数</b>与<b>占比</b>，红球区与蓝球区分别统计</li>'
+   +'<li>统计每个号码的<b>出现次数</b>与<b>占比</b>，红球区与蓝球区分别统计</li>'
+   +'<li><b>窗口</b>可切 <b>近一个月 / 近一年 / 全部历史</b>，'
+   +'切换后两个区的次数与占比<b>立即随之变化</b>；当前窗口的期数显示在下拉框右侧</li>'
    +'<li>默认按<b>出现次数升序 ▲</b>；点击表头（号码 / 出现次数 / 占比%）切换排序字段与升降序，'
    +'两个区独立排序</li>'
    +'<li>福彩3D / 排列三为<b>按位统计</b>（百位、十位、个位各 0-9），三个位各自独立排序，'
@@ -2516,7 +2571,11 @@ function showHelp(){
    +'<li><b>自动对奖</b>：每注都<b>自动与最新一期比对</b>，直接显示'
    +'「🎉 几等奖 · 多少元」或「未中奖」；如果这注是在最新一期开奖<b>之后</b>才存的，'
    +'会显示「⏳ 待开奖」</li>'
-   +'<li>列表顶部有<b>中奖汇总</b>：几注中奖、固定奖共多少元、几注待开奖</li>'
+   +'<li>列表顶部有<b>中奖汇总</b>：几注中奖、固定奖共多少元、几注待开奖，'
+   +'以及<b>已买 / 未买</b>各多少注</li>'
+   +'<li><b>已购买 / 未购买</b>：添加时默认「⚪ 未购买」（因为选号不等于真的买了），'
+   +'真买了点<b>「标记为已买」</b>改成「✅ 已购买」——<b>单向操作，不能改回</b>，'
+   +'避免误改导致对账不准；这里改了会<b>自动同步</b>到「我的选号记录」里的同一条</li>'
    +'<li>选号保存在<b>本机浏览器</b>里，换设备或清理浏览器数据会丢失；'
    +'每次添加都会自动归档到「<b>我的选号记录</b>」，那里长期保留</li>'
    +'<li><b>复制文本</b>：每注下方「复制这注」生成 <b>01 02 04 17 19 30 + 09</b> 格式；'
@@ -2530,17 +2589,18 @@ function showHelp(){
    +'<li>每条记录显示<b>彩种、号码、保存时间</b>，以及相对该彩种最新一期的<b>对奖结果</b>'
    +'（中奖 / 未中奖 / 待开奖）</li>'
    +'<li>按时间倒序排列，顶部汇总「共多少条、几注曾中奖、几注待开奖」</li>'
+   +'<li><b>只显示「已购买」</b>的记录——没买的不进这个列表，'
+   +'所以它相当于「我买过的号」档案</li>'
    +'<li><b>筛选</b>：可按 <b>彩种</b>（双色球/大乐透/福彩3D/排列三）、'
-   +'<b>购买状态</b>（已购买 / 未购买）、<b>开奖状态</b>（待开奖 / 已开奖）'
+   +'<b>开奖状态</b>（待开奖 / 已开奖）'
    +'以及 <b>日期区间</b> 组合筛选；汇总会跟着筛选结果变化，'
-   +'点「清除筛选」恢复全部</li>'
+   +'点「清除筛选」恢复</li>'
    +'<li>最多保留 <b>500 条</b>，超出会丢弃最早的；只存在本机浏览器，不会上传</li>'
    +'<li>每条下方有<b>「删除」</b>按钮，点一下变成<b>「确认删除」</b>再点才真删（旁边有取消）；'
    +'顶部「清空全部记录」一次性删除全部</li>'
-   +'<li><b>选号不等于购买</b>：新记录默认标为「⚪ 未购买」——因为添加号码只是选号，'
-   +'不代表真的去买了。真的买了就点<b>「标记为已买」</b>改成「✅ 已购买」，'
-   +'点错可再点一次改回来</li>'
-   +'<li>顶部汇总区分<b>已买 / 未买</b>各多少条，方便对账</li></ul>'
+   +'<li><b>选号不等于购买</b>：添加号码只是选号，不代表真的去买了。'
+   +'真的买了请在「我的选号」里点<b>「标记为已买」</b>改成「✅ 已购买」，'
+   +'<b>标记后不能改回</b></li></ul>'
 
    +'<h4>顶部时间</h4><ul>'
    +'<li><b>数据更新于</b>＝页面构建（抓取数据）的时刻，固定不变，可用来判断数据新旧</li>'
@@ -2856,21 +2916,29 @@ function renderTrend3(){
 
 /* ---------- 出现次数（按位） ---------- */
 function renderFreq3(){
-  var d=D[S.lot], rows=d.rows, N=rows.length, i, n;
-  var h='<div class="card"><div class="hint">默认按出现次数升序 ▲，点击表头切换排序字段与升降序</div>';
+  var d=D[S.lot], i, n;
+  var win=S.freqWin||'all', sc=scopeRows(win), rows=sc.rows, N=rows.length;
+  var h='<div class="card"><div class="bar"><label>窗口</label>'
+   +'<select onchange="S.freqWin=this.value;render()">'
+   +[['month','近一个月'],['year','近一年'],['all','全部历史']]
+     .map(function(o){return '<option value="'+o[0]+'"'+(win===o[0]?' selected':'')+'>'+o[1]+'</option>'}).join('')
+   +'</select>'
+   +'<label style="color:#aaa;font-size:12px">'+sc.label+' · <b>'+N+'</b> 期</label></div>'
+   +'<div class="hint">默认按出现次数升序 ▲，点击表头切换排序字段与升降序；切换窗口后数据随之变化</div>';
   for(var p=0;p<3;p++) h+=freq3Block(p,d,rows,N);
   /* 和值分布 */
-  var sc=[], mx=0;
-  for(i=0;i<=27;i++) sc[i]=0;
-  for(i=0;i<N;i++){ var s=sumRed(rows[i]); sc[s]++; if(sc[s]>mx) mx=sc[s]; }
+  var scnt=[], mx=0;
+  for(i=0;i<=27;i++) scnt[i]=0;
+  for(i=0;i<N;i++){ var s=sumRed(rows[i]); scnt[s]++; if(scnt[s]>mx) mx=scnt[s]; }
   h+='<div class="sec">和值分布（0 ~ 27）</div><div class="heatgrid">';
   for(i=0;i<=27;i++){
-    var r=Math.round(sc[i]/mx*255);
+    var r=Math.round(scnt[i]/mx*255);
     h+='<div class="hcell" style="background:rgb('+(255-r)+','+(255-r)+',255)">'
-      +'<div class="hn">'+i+'</div><div class="hc">'+sc[i]+'次</div></div>';
+      +'<div class="hn">'+i+'</div><div class="hc">'+scnt[i]+'次</div></div>';
   }
   h+='</div>';
-  h+='<div class="note">统计区间：'+rows[0][0]+' ~ '+rows[N-1][0]+'，共 '+N+' 期。'
+  h+='<div class="note">统计区间：'+rows[0][0]+' ~ '+rows[N-1][0]
+    +'，共 '+N+' 期（'+sc.label+'）。'
     +'每位数字理论上出现概率均为 10%，实际差异属于正常随机波动。</div></div>';
   return h;
 }
@@ -2955,7 +3023,7 @@ function addBet3(){
   var i, miss=[];
   for(i=0;i<3;i++) if(S.pick3[i]===null||S.pick3[i]===undefined) miss.push(i);
   if(miss.length){ toast('请为每一位各选一个数字'); return; }
-  var bet={r:S.pick3.slice(), b:[], t:Date.now()};
+  var bet={r:S.pick3.slice(), b:[], t:Date.now(), bought:0};
   var a=getBets(); a.push(bet); saveBets(a);
   addRec(S.lot, bet);
   S.pick3=[null,null,null];
@@ -2994,8 +3062,12 @@ function renderMine3(){
       else
         h+='<div class="bres">未中奖 <span style="opacity:.75">（'+esc(r.issue)
           +' 期 · 开奖 '+r.hit.join(' ')+'）</span></div>';
+      var isB3=bet.bought?1:0;
+      h+='<div style="margin-top:6px"><span class="buyflag '+(isB3?'on':'')+'">'
+        +(isB3?'✅ 已购买':'⚪ 未购买')+'</span></div>';
       h+='<div class="betops" style="margin:8px 0 0">'
         +'<button onclick="copyBet('+i+')">复制这注</button>'
+        +(isB3?'':'<button onclick="toggleBetBought('+i+')">标记为已买</button>')
         +'<button class="delbtn" onclick="delBet('+i+')">删除</button></div></div>';
     }
   }

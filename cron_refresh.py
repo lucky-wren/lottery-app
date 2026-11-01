@@ -160,6 +160,16 @@ def fetch_one(lot, crawler, poll_minutes=0, interval=90):
         log("%s 完整抓取失败: %s" % (lot, e))
         return None
 
+    # ───── CI 场景关键修复 ─────
+    # get_data_safe 在实时抓取失败时会「静默回落到过期缓存」，返回 source="stale"。
+    # 在 CI 里这等于灾难：本次看起来抓取成功，写回的内容与仓库里的一模一样，
+    # md5 不变 → CHANGED=no → 走心跳提交 → job 全绿，但数据永远停在旧版本。
+    # 所以这里必须把 stale 判定为失败，绝不能拿旧缓存冒充新数据。
+    if src == "stale":
+        log("%s: ⚠ 实时抓取失败，回落过期缓存（stale）——CI 判定为失败，不写入"
+            % lot)
+        return None
+
     body = strip(data)
     # 期号倒退保护：抓到的比仓库里还旧，说明接口异常或解析出错，
     # 绝不能拿它覆盖好数据。
@@ -200,9 +210,11 @@ def main():
 
     import crawler
     ok = 0
+    failed = []
     for lot in LOTS:
         body = fetch_one(lot, crawler, args.poll_minutes, args.interval)
         if not body:
+            failed.append(lot)
             continue
         with open(os.path.join(STATIC, "data", lot + ".json"), "w",
                   encoding="utf-8") as f:
@@ -212,8 +224,9 @@ def main():
                                       body["rows"][-1][0], body["rows"][-1][1]))
 
     if ok == 0:
-        log("两个彩种都抓取失败，不覆盖已有文件")
+        log("全部彩种都抓取失败，不覆盖已有文件")
         print("CHANGED=no")
+        print("FAILED=" + ",".join(failed))
         return 1
 
     import build_single
@@ -229,6 +242,18 @@ def main():
     changed = before != after
     log("数据变化: %s" % ("是" if changed else "否"))
     print("CHANGED=" + ("yes" if changed else "no"))
+    print("FAILED=" + ",".join(failed))
+
+    # ───── 部分失败也必须让 job 变红 ─────
+    # 以前只要 ssq/dlt 成功、3d/pls 挂掉，ok>=1 就正常退出 0，
+    # 而 3d/pls 恰恰是每天都开奖的彩种——结果就是「天天全绿，天天不更新」。
+    # 现在任何彩种失败都退出 1，已成功的部分照样写入，不浪费。
+    if failed:
+        log("")
+        log("⚠⚠ 以下彩种本次抓取失败，数据未更新：%s" % "、".join(failed))
+        log("   典型原因：GitHub runner 在境外，官方接口拒绝或超时。")
+        log("   请查看本 job「检查官方接口连通性（诊断）」那一步的 HTTP 状态码。")
+        return 1
     return 0
 
 
