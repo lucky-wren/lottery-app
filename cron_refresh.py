@@ -38,6 +38,14 @@ sys.path.insert(0, BASE)
 
 STATIC = os.path.join(BASE, "dist", "static_site")
 SINGLE = os.path.join(BASE, "dist", "单文件版")
+
+# 被 IP 风控拦下的彩种（环境问题，非代码 bug）
+BLOCKED = []
+
+
+def _is_block_msg(e):
+    s = str(e)
+    return ('403' in s) or ('567' in s) or ('Forbidden' in s)
 META_KEYS = ("name", "redMax", "blueMax", "redCount", "blueCount",
              "redLabel", "blueLabel", "source",
              # 福彩3D / 排列三：按位玩法标记与位名，缺了前端会按双色球渲染
@@ -158,6 +166,10 @@ def fetch_one(lot, crawler, poll_minutes=0, interval=90):
         data, src = crawler.get_data_safe(lot, force=True)
     except Exception as e:
         log("%s 完整抓取失败: %s" % (lot, e))
+        # IP 级封禁单独标记：这是环境问题，不是代码 bug，
+        # 不该让 job 长期飘红刷屏。
+        if isinstance(e, crawler.IPBlocked) or _is_block_msg(e):
+            BLOCKED.append(lot)
         return None
 
     # ───── CI 场景关键修复 ─────
@@ -227,6 +239,11 @@ def main():
         log("全部彩种都抓取失败，不覆盖已有文件")
         print("CHANGED=no")
         print("FAILED=" + ",".join(failed))
+        if BLOCKED and set(failed) <= set(BLOCKED):
+            log("   原因：出口 IP 被官方风控拦截（403/567），非代码问题。")
+            print("BLOCKED=yes")
+            return 0
+        print("BLOCKED=no")
         return 1
 
     import build_single
@@ -248,12 +265,22 @@ def main():
     # 以前只要 ssq/dlt 成功、3d/pls 挂掉，ok>=1 就正常退出 0，
     # 而 3d/pls 恰恰是每天都开奖的彩种——结果就是「天天全绿，天天不更新」。
     # 现在任何彩种失败都退出 1，已成功的部分照样写入，不浪费。
+    #
+    # 唯一例外：全部失败都源于「出口 IP 被风控拦截」。
+    # 那属于环境限制（GitHub runner 在境外），重试、改代码都没用，
+    # 让它天天飘红只会淹没真正的故障。所以降级为警告并退出 0。
     if failed:
         log("")
         log("⚠⚠ 以下彩种本次抓取失败，数据未更新：%s" % "、".join(failed))
-        log("   典型原因：GitHub runner 在境外，官方接口拒绝或超时。")
+        if BLOCKED and set(failed) <= set(BLOCKED):
+            log("   原因：出口 IP 被官方风控拦截（403/567），非代码问题。")
+            log("   这是 GitHub runner 位于境外的固有限制，CI 自动更新不可靠。")
+            log("   建议：本地运行「刷新数据.bat」后上传 dist/单文件版/彩票统计.html。")
+            print("BLOCKED=yes")
+            return 0
         log("   请查看本 job「检查官方接口连通性（诊断）」那一步的 HTTP 状态码。")
         return 1
+    print("BLOCKED=no")
     return 0
 
 

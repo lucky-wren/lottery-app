@@ -33,9 +33,28 @@ def _http(url, headers, timeout=25):
     return urllib.request.urlopen(req, timeout=timeout).read()
 
 
+class IPBlocked(Exception):
+    """出口 IP 被对方风控拉黑。
+
+    与「概率性 403」不同：IP 级封禁重试多少次都没用，
+    反而会因为短时间高频请求把封禁时间拖得更长。
+    """
+
+
+def _is_ip_block(e):
+    """判断异常是否为 IP 级封禁，而非普通网络抖动"""
+    s = str(e)
+    return ('403' in s) or ('567' in s) or ('Forbidden' in s)
+
+
 def _retry(fn, tries=8, base=0.25):
-    """概率性 403 的重试封装"""
+    """概率性 403 的重试封装。
+
+    遇到 403 / 567 这类 IP 级封禁时只试 2 次就放弃并抛 IPBlocked，
+    避免「被拉黑 → 疯狂重试 → 封更久」的恶性循环。
+    """
     last = None
+    block_hits = 0
     for i in range(tries):
         try:
             r = fn()
@@ -43,6 +62,13 @@ def _retry(fn, tries=8, base=0.25):
                 return r
         except Exception as e:          # noqa
             last = e
+            if _is_ip_block(e):
+                block_hits += 1
+                # 只多给一次机会（可能是 UA/Referer 问题），仍失败则认定为封禁
+                if block_hits >= 2:
+                    raise IPBlocked(
+                        "出口 IP 疑似被风控拦截（%s）。重试无效，已停止请求以免加重封禁。" % e
+                    )
         time.sleep(base + 0.15 * i + random.random() * 0.2)
     raise RuntimeError("抓取失败（已重试 %d 次）: %s" % (tries, last))
 
