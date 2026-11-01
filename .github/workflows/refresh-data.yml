@@ -37,8 +37,10 @@ on:
     - cron: '53 13 * * 1,3,6'
 
     # 福彩3D / 排列三：每天开奖（3D 北京 21:15、排列三 21:25）
-    # 北京 21:37（UTC 13:37）已含在上面双色球那条里，这里补一条每天必跑的
-    - cron: '17 13 * * *'      # 北京 21:17
+    # ⚠ 原来定在北京 21:17，早于排列三 21:25 开奖——当天必然抓不到，
+    #   只能等次日 09:13 兜底。现改到 21:43，晚于两个彩种开奖时刻，
+    #   配合 --poll-minutes 等官方出数据，当天即可抓齐。
+    - cron: '43 13 * * *'      # 北京 21:43
     # 每日兜底：北京 09:13（非开奖日的次日也能兜住漏网之鱼）
     - cron: '13 1 * * *'
 
@@ -116,7 +118,11 @@ jobs:
           echo "退出码: $rc"
           echo "rc=$rc" >> $GITHUB_OUTPUT
           echo "changed=$(grep -c 'CHANGED=yes' cron.log || true)" >> $GITHUB_OUTPUT
-          exit $rc
+          echo "failed=$(grep -o 'FAILED=.*' cron.log | tail -1 | cut -d= -f2-)" >> $GITHUB_OUTPUT
+          # 这里故意不 exit：
+          # 部分彩种失败时（如 3d/pls 挂了但 ssq/dlt 正常），
+          # 仍要让下面的「提交」步骤把已成功的数据存下来，
+          # 失败判定统一放到最后一个步骤，避免白白丢掉成功的一半。
 
       - name: 显示结果
         run: cat cron.log || true
@@ -146,6 +152,22 @@ jobs:
           git add dist/.last-check
           git diff --staged --quiet || git commit -m "chore: heartbeat $(TZ='Asia/Shanghai' date '+%F %H:%M')"
           git push
+
+      # ───────── 统一失败判定（必须放在提交之后） ─────────
+      # 任何彩种抓取失败都让 job 变红，杜绝「全绿但数据从不更新」。
+      # 已成功抓取的部分在上面的「提交」步骤里已经存好了，不会丢。
+      - name: 判定本次是否失败（任一彩种失败即失败）
+        if: steps.gen.outputs.rc != '0'
+        run: |
+          echo "::error::本次抓取有彩种失败：${{ steps.gen.outputs.failed }}"
+          echo ""
+          echo "排查方向："
+          echo "  1) 先看本 job「检查官方接口连通性（诊断）」那一步的 HTTP 状态码"
+          echo "     - 200        → 网络正常，多为官方无新数据或返回结构异常"
+          echo "     - 000/连接失败 → GitHub runner 在境外，被官方接口拒绝。"
+          echo "       此时自动更新不可用，只能本地跑「刷新数据.bat」再上传成品"
+          echo "  2) 再看「显示结果」那一步的 [cron] 日志，确认具体报错彩种"
+          exit 1
 
       # ───────── 可选：直接上传到腾讯云 CloudBase 静态托管 ─────────
       # 在仓库 Settings → Secrets 加两个变量后取消注释：
