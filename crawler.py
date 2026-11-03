@@ -174,7 +174,50 @@ def fetch_ssq():
         "redLabel": "红球", "blueLabel": "蓝球",
         "rows": rows,
         "pool": _ssq_pool(d),
+        "poolHist": _pool_hist_ssq(d),
     }
+
+
+POOL_HIST_N = 120          # 奖池序列保留最近多少期
+
+
+def _pool_hist_ssq(d, n=POOL_HIST_N):
+    """双色球：一次请求里每期都带 poolmoney，直接抽成序列
+
+    返回 [[期号, 日期, 奖池, 销量, 一等奖奖金], ...] 按时间升序。
+    """
+    out = []
+    for it in d.get("result", []):
+        pool = _num(it.get("poolmoney"))
+        if not pool:
+            continue
+        p1 = None
+        for g in (it.get("prizegrades") or []):
+            if str(g.get("type")) == "1":
+                p1 = _num(g.get("typemoney"))
+                break
+        out.append([it.get("code"), (it.get("date") or "")[:10],
+                    pool, _num(it.get("sales")), p1])
+    out.sort(key=lambda r: r[0])
+    return out[-n:]
+
+
+def _pool_hist_dlt(lst, n=POOL_HIST_N):
+    """大乐透：分页接口每期都带 poolBalance，抽成序列"""
+    out = []
+    for it in lst or []:
+        pool = _num(it.get("poolBalance"))
+        if not pool:
+            continue
+        p1 = None
+        for g in (it.get("prizeLevelList") or []):
+            if "一等奖" in str(g.get("prizeLevel") or ""):
+                p1 = _num(g.get("stakeAmount"))
+                break
+        out.append([it.get("lotteryDrawNum"), (it.get("lotteryDrawTime") or "")[:10],
+                    pool, _num(it.get("totalSaleAmount")), p1])
+    out.sort(key=lambda r: (len(str(r[0])), str(r[0])))
+    return out[-n:]
 
 
 def _dlt_page(page, size):
@@ -319,6 +362,7 @@ def fetch_dlt(max_pages=None):
         "redLabel": "前区", "blueLabel": "后区",
         "rows": all_rows,
         "pool": _dlt_pool(first.get("list") or []),
+        "poolHist": _pool_hist_dlt(first.get("list") or []),
     }
 
 
@@ -358,6 +402,7 @@ def fetch_dlt_recent(pages=3):
         "redLabel": "前区", "blueLabel": "后区",
         "rows": rows,
         "pool": _dlt_pool(raw1.get("list") or []),
+        "poolHist": _pool_hist_dlt(raw1.get("list") or []),
     }
 
 
@@ -510,6 +555,9 @@ def _merge(old, new):
     new["rows"] = rows
     if not new.get("pool") and (old or {}).get("pool"):
         new["pool"] = old["pool"]
+    # 奖池序列：抓不到时保留旧的，避免走势图被清空
+    if not new.get("poolHist") and (old or {}).get("poolHist"):
+        new["poolHist"] = old["poolHist"]
     new["_t"] = time.time()
     return new
 

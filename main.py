@@ -33,7 +33,7 @@ META_KEYS = ("name", "redMax", "blueMax", "redCount", "blueCount",
              # 福彩3D / 排列三：按位玩法标记与位名，缺了前端会按双色球渲染
              "positional", "posLabels", "minNum",
              # 奖池 / 销量 / 浮动奖实际奖金 / 福运奖
-             "pool")
+             "pool", "poolHist")
 
 
 def strip(obj):

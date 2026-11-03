@@ -21,7 +21,7 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(BASE, "dist", "static_site")
 DATA = os.path.join(OUT, "data")
 META_KEYS = ("name", "redMax", "blueMax", "redCount", "blueCount",
-             "redLabel", "blueLabel", "pool")
+             "redLabel", "blueLabel", "pool", "poolHist")
 
 refresh = "--refresh" in sys.argv
 
@@ -94,6 +94,13 @@ def build_html():
                                                           separators=(",", ":")) + ";", 1)
         log("访问授权：已内嵌（到期 %s，%d 个授权码）"
             % (lic.get("expire"), len(lic.get("codes") or [])))
+    # PWA：manifest / Service Worker / 图标（让手机能「添加到主屏幕」）
+    try:
+        from pwa_assets import install_pwa
+        html = install_pwa(OUT, html, single=False)
+        log("PWA: manifest.json / sw.js / 图标 已写入")
+    except Exception as e:      # noqa
+        log("PWA 资源写入失败（不影响主功能）: %s" % e)
     with open(os.path.join(OUT, "index.html"), "w", encoding="utf-8") as f:
         f.write(html)
     assert "var STATIC_BUILD = true;" in html

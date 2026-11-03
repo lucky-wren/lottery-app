@@ -21,7 +21,7 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 OUTDIR = os.path.join(BASE, "dist", "单文件版")
 DATA = os.path.join(BASE, "dist", "static_site", "data")
 META_KEYS = ("name", "redMax", "blueMax", "redCount", "blueCount",
-             "redLabel", "blueLabel", "pool", "positional", "posLabels", "minNum")
+             "redLabel", "blueLabel", "pool", "poolHist", "positional", "posLabels", "minNum")
 
 refresh = "--refresh" in sys.argv
 
@@ -193,6 +193,16 @@ def build():
     # 标记：内嵌模式 + 静态模式
     html = html.replace("var STATIC_BUILD = false;",
                         "var STATIC_BUILD = true;\nvar EMBEDDED_BUILD = true;", 1)
+
+    # PWA：单文件版无法附带独立文件，manifest 与图标都用 data URI 内嵌。
+    # Service Worker 不能注册 data URI，所以单文件版只做「添加到主屏幕有图标」，
+    # 离线能力靠它自身（数据本就烤在文件里，浏览器缓存住即可）。
+    try:
+        from pwa_assets import inline_pwa
+        html = inline_pwa(html)
+        log("PWA: 已内嵌 manifest 与 apple-touch-icon（data URI）")
+    except Exception as e:      # noqa
+        log("PWA 内嵌失败（不影响主功能）: %s" % e)
 
     # 访问授权：存在 license.json 就内嵌（只含散列，不含明文授权码）
     lic = load_license()
