@@ -4344,6 +4344,12 @@ var HELP_SECTIONS=[
    +'不会因为偏好开得强就频繁撞车而退化</li>'
    +'<li><b>避免多注雷同</b>（默认开启）：生成多注时，任意两注的红球重合不超过设定值（默认 2 个），'
    +'避免你花两份钱买到几乎同一组号。<b>这是本页唯一能真正帮你省钱的地方</b></li>'
+   +'<li><b>近 N 期避重</b>：「近 N 期」可选 3 / 5 / 10（默认 5 期），'
+   +'「最多重合」可选 1 / 2 / 3 个（默认 2 个）。<b>逐期（默认）</b>＝与近 N 期每一期分别比，'
+   +'任意一期重合都不超过 M 个；<b>严格避重（开关）</b>＝与近 N 期出现过的全部号码合计重合不超过 M 个，'
+   +'条件很紧，试不出来时会取「最接近的一注」并在分析里标红，不会卡住。<br>'
+   +'福彩3D / 排列三只有 10 个数字，严格模式改用「同位命中 ≤ 1 且不复制近 N 期任一期」，'
+   +'默认模式为同位命中 ≤ M 位，建议把 M 设为 1。<b>生成后会给出「N 注达标」的汇总</b></li>'
    +'<li>需要知道的是：<b>号码之间的冷热差距本身就是随机噪声</b>。'
    +'以双色球为例，33 个号码在 2000 多期里的出现次数集中在 330~430 次（理论均值 378），'
    +'这个幅度完全落在二项分布的正常波动范围内，<b>挑不出真正更热或更冷的号</b>。'
@@ -4358,14 +4364,19 @@ var HELP_SECTIONS=[
    +'③<b>历史最相近的一期</b>：全史中离这注最近的一期（期号 / 日期 / 开奖号码 / 命中几个），'
    +'以及「这注如果每期都买」的<b>命中个数分布</b>；'
    +'④<b>形态明细</b>：和值在历史中的<b>百分位</b>、奇偶比、大小比、跨度、三区分布，'
-   +'并列出连号、同尾、与上期重号的<b>具体号码</b></li>'
+   +'并列出连号、同尾、与上期重号的<b>具体号码</b>；'
+   +'⑤<b>近 N 期重号矩阵</b>：近 N 期<b>每期一行</b>，列出期号、日期、开奖号码、'
+   +'与本注重合几个、具体是哪几个号，超标的行标红，末尾给出本注是否达标</li>'
    +'<li>可用<b>「展开全部分析」</b>一次展开整批。⚠️ 这些分析回答的是'
    +'「这注在历史上是什么来头」，<b>不代表下期更可能中</b>——偏离理论值也不意味着更容易或更不容易中奖</li>'
    +'<li>号码可点<b>「保存」</b>进入「我的选号」，之后照常购买与核对；重复号码会被拦下</li>'
    +'<li>底部<b>「偏好回放」</b>是这一页的关键：它对最近 24 期，每一期<b>只用该期之前的数据</b>'
-   +'按各偏好（含形态典型）生成一注，统计平均命中几个号，并与<b>理论期望值</b>并列</li>'
+   +'按各偏好（含形态典型）生成一注，统计平均命中几个号，并与<b>理论期望值</b>并列；'
+   +'还会<b>再加一列「近 N 期避重」</b>：同一期用当前避重口径单独生成一注统计，'
+   +'避重所用的近几期同样只取该期之前的数据</li>'
    +'<li>回放的意义不是挑出「最优偏好」，而是让你看到：<b>各偏好的实测值都围绕理论值波动，纯随机也在同一区间内</b>，'
-   +'<b>名次每次回放都会变</b>——说明没有任何偏好（包括形态典型）真正优于机选</li></ul>'
+   +'<b>名次每次回放都会变</b>——说明没有任何偏好（包括形态典型）真正优于机选；'
+   +'<b>新增的避重列也围绕理论值波动</b>，说明「不与近几期重号」同样不提高命中率</li></ul>'
    +'<p style="font-size:12px;color:#888"><b>形态约束不会提高中奖概率</b>——每个组合的中奖概率始终完全相同。'
    +'它的作用是让号码<b>看起来不那么怪</b>、并防止多注雷同浪费钱；把它当作省事的选号起点即可。</p>'
   },
@@ -6131,6 +6142,71 @@ function guessOverlap(a, b){
   for(i=0;i<a.length;i++) if(b.indexOf(a[i])>=0) c++;
   return c;
 }
+/* 权重缓存：guessOneRaw 每次抽样都要扫全史算次数，回放里会重复几千次。
+   键含彩种 / 偏好 / 偏向 / upto / 位置，任一变化都会重新算，不会算错。 */
+var _gwCache={}, _gwN=0;
+function guessWeightsCached(strategy, upto, key, min, max, per, posIdx){
+  var b=+S.guessBias; if(isNaN(b)||b<=0) b=0.6;
+  var ck=S.lot+'|'+strategy+'|'+upto+'|'+key+'|'+min+'-'+max+'|'+posIdx+'|'+b;
+  if(_gwCache[ck]) return _gwCache[ck];
+  var st=guessStatArr(key, upto, min, max, posIdx);
+  var w=guessWeights(st, min, max, strategy, per);
+  _gwCache[ck]=w;
+  if(++_gwN>1500){ _gwCache={}; _gwN=0; }      /* 回放会换 upto，防止无限增长 */
+  return w;
+}
+/* ═════════ 近 N 期避重约束 ═════════
+   默认 A（逐期）：与近 N 期每一期分别比，任意一期重合 ≤ M 个。
+   严格 B（并集）：与近 N 期出现过的所有红球（并集）合计重合 ≤ M 个。
+   按位玩法：数字全集只有 10 个，近 5 期约覆盖 8 个，并集口径几乎不可能满足；
+   改用「同位命中 ≤ min(M,1) 且数字集合不与近 N 期任一期完全相同」。
+   返回「违反程度」而不是布尔：0 = 完全合规，数值越大越不合规，
+   这样试不出来时能取最接近的一注，而不是硬拒绝导致生成器退化。 */
+function guessRecentRows(upto, N){
+  var d=D[S.lot]; if(!d||!d.rows) return [];
+  var rows=d.rows, out=[], i, from=Math.max(0, upto-(N||5));
+  for(i=from;i<upto;i++){
+    var r=rows[i]||{};
+    out.push({issue:r[0]||'', date:r[1]||'', r:(r[2]||[]).slice(), b:(r[3]||[]).slice()});
+  }
+  return out;
+}
+function guessRecentViolation(g, recent, N, M, strict){
+  if(!recent||!recent.length) return 0;
+  var i, j, qi, v=0, lim=+M||2;
+  if(isPos()){
+    var pl=strict?Math.min(lim,1):lim;
+    for(i=0;i<recent.length;i++){
+      var same=0, rr=recent[i].r||[];
+      for(qi=0;qi<(g.r||[]).length&&qi<rr.length;qi++) if(g.r[qi]===rr[qi]) same++;
+      if(same>pl) v+=same-pl;
+      if(strict && (g.r||[]).slice().sort().join(',')===rr.slice().sort().join(',')) v+=3;
+    }
+    return v;
+  }
+  if(strict){
+    /* B：并集里命中了几个 */
+    var seen={};
+    for(i=0;i<recent.length;i++){
+      var ar=recent[i].r||[];
+      for(j=0;j<ar.length;j++) seen[ar[j]]=1;
+    }
+    var hit=0;
+    for(j=0;j<(g.r||[]).length;j++) if(seen[g.r[j]]) hit++;
+    if(hit>lim) v+=hit-lim;
+  }else{
+    /* A：逐期比较，累加每期超出 M 的部分 */
+    for(i=0;i<recent.length;i++){
+      var ov=guessOverlap(g.r||[], recent[i].r||[]);
+      if(ov>lim) v+=ov-lim;
+    }
+  }
+  return v;
+}
+function guessRecentOK(g, cfg){
+  if(!cfg||!cfg.recent||!cfg.recent.length) return true;
+  return guessRecentViolation(g, cfg.recent, cfg.N, cfg.M, cfg.strict)===0;
+}
 /* 与已生成的一批相比是否过于雷同 */
 function guessTooSimilar(g, list, maxOv){
   var i;
@@ -6150,19 +6226,17 @@ function guessOneRaw(strategy, upto, pen){
   if(isPos()){
     var out=[], p;
     for(p=0;p<3;p++){
-      var st=guessStatArr(2, upto, 0, 9, p);
-      var w=guessWeights(st, 0, 9, strategy, 0.1);
+      var w=guessWeightsCached(strategy, upto, 2, 0, 9, 0.1, p);
       out.push(guessSample(w, 0, 9, 1, pen)[0]);
     }
     return {r:out, b:[]};
   }
-  var stR=guessStatArr(2, upto, 1, d.redMax, -1);
-  var wR=guessWeights(stR, 1, d.redMax, strategy, d.redCount/d.redMax);
+  var wR=guessWeightsCached(strategy, upto, 2, 1, d.redMax, d.redCount/d.redMax, -1);
   var reds=guessSample(wR, 1, d.redMax, d.redCount, pen);
   var blues=[];
   if(d.blueMax){
-    var stB=guessStatArr(3, upto, 1, d.blueMax, -1);
-    var wB=guessWeights(stB, 1, d.blueMax, strategy, (d.blueCount||1)/d.blueMax);
+    var wB=guessWeightsCached(strategy, upto, 3, 1, d.blueMax,
+                              (d.blueCount||1)/d.blueMax, -1);
     blues=guessSample(wB, 1, d.blueMax, d.blueCount||1);
   }
   return {r:reds, b:blues};
@@ -6184,25 +6258,47 @@ function guessPenalty(list, spread){
   }
   return pen;
 }
-/* 带形态约束 + 反雷同的单注生成（拒绝采样；试不出来就逐步放宽，不会死循环） */
-function guessOne(strategy, upto, prof, avoid, maxOv){
+/* 单注生成：形态 + 多注反雷同 + 近 N 期避重，三级放宽，绝不硬拒绝。
+   cfg = {N,M,strict,recent}；tries 供回放降低尝试次数（省时）。
+   阶段①全满足 → ②放宽形态 → ③放宽避重（取违反程度最小的一注并标记）。
+   严格 B 的通过率约 12%，若用硬拒绝会频繁撞车、连带把反雷同也拖垮，
+   这正是前几轮「多注雷同」复发的老毛病。 */
+function guessOne(strategy, upto, prof, avoid, maxOv, cfg, tries){
   var t, g, m;
   var pen=guessPenalty(avoid, S.guessSpread);
-  for(t=0;t<80;t++){
+  var T1=tries?tries[0]:80, T2=tries?tries[1]:60, T3=tries?tries[2]:60;
+  var hasCfg=!!(cfg&&cfg.recent&&cfg.recent.length);
+  function simOK(x){ return !(avoid && maxOv<90 && guessTooSimilar(x, avoid, maxOv)); }
+  function recentOK(x){ return !hasCfg || guessRecentOK(x, cfg); }
+  function viol(x){ return hasCfg ? guessRecentViolation(x,cfg.recent,cfg.N,cfg.M,cfg.strict) : 0; }
+  for(t=0;t<T1;t++){
     g=guessOneRaw(strategy, upto, pen);
     if(prof){
       m = prof.pos ? guessMorphPos(g.r, prof.last) : guessMorph(g.r, prof.last);
       if(!guessMorphOK(m, prof)) continue;
     }
-    if(avoid && maxOv<90 && guessTooSimilar(g, avoid, maxOv)) continue;
+    if(!simOK(g)) continue;
+    if(!recentOK(g)) continue;
     return g;
   }
-  for(t=0;t<60;t++){                       /* 放宽：只避开雷同，形态不再强求 */
+  for(t=0;t<T2;t++){                       /* 放宽形态，仍守住反雷同与避重 */
     g=guessOneRaw(strategy, upto, pen);
-    if(avoid && maxOv<90 && guessTooSimilar(g, avoid, maxOv)) continue;
+    if(!simOK(g)) continue;
+    if(!recentOK(g)) continue;
     return g;
   }
-  return guessOneRaw(strategy, upto, pen);
+  /* 软约束：优先同时满足反雷同；实在不行只按避重最接近取，并标注未达标 */
+  var bestBoth=null, bestBothV=1e9, bestAny=null, bestAnyV=1e9;
+  for(t=0;t<T3;t++){
+    g=guessOneRaw(strategy, upto, pen);
+    var v=viol(g);
+    if(v<bestAnyV){ bestAnyV=v; bestAny=g; }
+    if(simOK(g) && v<bestBothV){ bestBothV=v; bestBoth=g; }
+    if(v===0 && simOK(g)) return g;
+  }
+  var pick=bestBoth||bestAny||guessOneRaw(strategy, upto, pen);
+  pick._recentWarn = hasCfg && (viol(pick)>0);
+  return pick;
 }
 function guessUpTo(){ var d=D[S.lot]; return (d&&d.rows)?d.rows.length:0; }
 /* 理论期望命中数：红球 = 选号个数² / 号码总数 */
@@ -6213,24 +6309,40 @@ function guessTheory(){
   return {red:d.redCount*(d.redCount/d.redMax),
           blue:d.blueMax?((d.blueCount||1)*((d.blueCount||1)/d.blueMax)):0};
 }
-/* 偏好回放：对最近 K 期，每期只用「该期之前」的数据生成一注，统计平均命中 */
-function guessBacktest(strategy, K, rounds){
+/* 偏好回放：对最近 K 期，每期只用「该期之前」的数据生成一注，统计平均命中。
+   cfg 非空时，同一期再生成一注「叠加近 N 期避重」的，单独统计一列——
+   用来验证避重约束同样不改变命中数（仍围绕理论值波动）。
+   避重所用的近 N 期也全部取自该期之前，绝不使用未来数据。 */
+function guessBacktest(strategy, K, rounds, cfg){
   var d=D[S.lot], rows=d.rows, N=rows.length;
   if(N<40) return null;
   K=Math.min(K||24, N-12); rounds=rounds||2;
-  var sumR=0, sumB=0, cnt=0, t, rd;
+  var sumR=0, sumB=0, sumRR=0, sumRB=0, cnt=0, t, rd;
+  var TR=[24,16,16];
   for(rd=0;rd<rounds;rd++){
     for(t=0;t<K;t++){
       var upto=N-K+t;
       var prof=guessProfile(upto);
-      var g=guessOne(strategy, upto, prof, null, 99);   /* 单注：只受形态约束 */
+      var g=guessOne(strategy, upto, prof, null, 99, null, TR);
       var ar=rows[upto][2]||[], ab=rows[upto][3]||[], i, hr=0, hb=0;
       for(i=0;i<g.r.length;i++) if(ar.indexOf(g.r[i])>=0) hr++;
       for(i=0;i<g.b.length;i++) if(ab.indexOf(g.b[i])>=0) hb++;
-      sumR+=hr; sumB+=hb; cnt++;
+      sumR+=hr; sumB+=hb;
+      if(cfg){
+        var one={N:cfg.N, M:cfg.M, strict:cfg.strict,
+                 recent:guessRecentRows(upto, cfg.N)};
+        var g2=guessOne(strategy, upto, prof, null, 99, one, TR);
+        var hr2=0, hb2=0;
+        for(i=0;i<g2.r.length;i++) if(ar.indexOf(g2.r[i])>=0) hr2++;
+        for(i=0;i<g2.b.length;i++) if(ab.indexOf(g2.b[i])>=0) hb2++;
+        sumRR+=hr2; sumRB+=hb2;
+      }
+      cnt++;
     }
   }
-  return {K:K, rounds:rounds, n:cnt, red:cnt?sumR/cnt:0, blue:cnt?sumB/cnt:0};
+  return {K:K, rounds:rounds, n:cnt,
+          red:cnt?sumR/cnt:0, blue:cnt?sumB/cnt:0,
+          rRed:cfg?(cnt?sumRR/cnt:0):null, rBlue:cfg?(cnt?sumRB/cnt:0):null};
 }
 function guessRun(){
   var upto=guessUpTo();
@@ -6239,13 +6351,17 @@ function guessRun(){
   var prof=guessProfile(upto);
   var dedup=(S.guessDedup===undefined)?true:!!S.guessDedup;
   var maxOv=dedup ? (+S.guessMaxOv||2) : 99;
+  var rN=+S.guessRecentN||5, rM=+S.guessRecentM||2, rStrict=!!S.guessStrict;
+  var cfg={N:rN, M:rM, strict:rStrict, recent:guessRecentRows(upto, rN)};
   var out=[];
   for(i=0;i<n;i++){
-    var g=guessOne(strat, upto, prof, out, maxOv);
+    var g=guessOne(strat, upto, prof, out, maxOv, cfg);
     if(prof){
       g._m = prof.pos ? guessMorphPos(g.r, prof.last) : guessMorph(g.r, prof.last);
       g._ok = guessMorphOK(g._m, prof);
     }
+    g._recent={N:rN, M:rM, strict:rStrict, rows:cfg.recent,
+               viol:guessRecentViolation(g, cfg.recent, rN, rM, rStrict)};
     out.push(g);
   }
   S.guessList=out; S.guessLot=S.lot; S.guessAt=guessNow();
@@ -6266,7 +6382,8 @@ function guessSave(i){
 function guessRunBT(){
   if(!guessUpTo()){ toast('数据尚未加载'); return; }
   var list=['morph','hot','cold','gap','balance','random'], out={}, i;
-  for(i=0;i<list.length;i++) out[list[i]]=guessBacktest(list[i], 24, 4);
+  var cfg={N:+S.guessRecentN||5, M:+S.guessRecentM||2, strict:!!S.guessStrict};
+  for(i=0;i<list.length;i++) out[list[i]]=guessBacktest(list[i], 24, 3, cfg);
   S.guessBT=out; S.guessLot=S.lot;
   render();
 }
@@ -6575,6 +6692,63 @@ function guessDetail(i){
   }else{
     h+='<div style="font-size:11px;color:var(--fg5)">暂无形态数据</div>';
   }
+
+  /* ── ⑤ 近 N 期重号矩阵：每期一行，列出重合几个、具体哪几个号 ── */
+  var rc=g._recent;
+  h+='<div style="font-size:12px;font-weight:600;margin:10px 0 5px">近 '
+    +((rc&&rc.N)||5)+' 期重号矩阵</div>';
+  if(rc&&rc.rows&&rc.rows.length){
+    var isP2=isPos(), lim2=+rc.M||2, totU={};
+    h+='<div style="overflow-x:auto"><table class="tb"><thead><tr>'
+      +'<th>期号</th><th>日期</th><th>开奖号码</th><th>重合</th><th>具体号码</th>'
+      +'</tr></thead><tbody>';
+    for(j=0;j<rc.rows.length;j++){
+      var row=rc.rows[j], sh=[], qi2, cnt2=0;
+      if(isP2){
+        var PN2=['百','十','个'];
+        for(qi2=0;qi2<(g.r||[]).length&&qi2<row.r.length;qi2++){
+          if(g.r[qi2]===row.r[qi2]){ sh.push(PN2[qi2]+'位 '+g.r[qi2]); cnt2++; }
+        }
+      }else{
+        for(qi2=0;qi2<(g.r||[]).length;qi2++){
+          if(row.r.indexOf(g.r[qi2])>=0){ sh.push(pad(g.r[qi2])); cnt2++; totU[g.r[qi2]]=1; }
+        }
+      }
+      var over=cnt2>lim2;
+      var nums='';
+      for(qi2=0;qi2<row.r.length;qi2++) nums+=(qi2?' ':'')+(isP2?row.r[qi2]:pad(row.r[qi2]));
+      if(!isP2&&row.b&&row.b.length) nums+=' +'+pad(row.b[0]);
+      h+='<tr><td style="white-space:nowrap">'+esc(String(row.issue))+'</td>'
+        +'<td style="font-size:11px;white-space:nowrap">'+esc(String(row.date||''))+'</td>'
+        +'<td style="font-size:11px;white-space:nowrap">'+nums+'</td>'
+        +'<td style="color:'+(over?'#c33':'inherit')+'"><b>'+cnt2+'</b>'
+        +(over?' ⚠':'')+'</td>'
+        +'<td style="font-size:11px">'+(sh.length?sh.join('、'):'无')+'</td></tr>';
+    }
+    h+='</tbody></table></div>';
+    if(rc.strict&&!isP2){
+      var allSeen={};
+      for(j=0;j<rc.rows.length;j++){
+        var ar2=rc.rows[j].r||[];
+        for(var zi=0;zi<ar2.length;zi++) allSeen[ar2[zi]]=1;
+      }
+      var hitU=0, keysU=0;
+      for(j=0;j<(g.r||[]).length;j++) if(allSeen[g.r[j]]) hitU++;
+      for(var ku in allSeen) keysU++;
+      h+='<div style="font-size:11px;margin-top:4px">严格（并集）口径：近 '+rc.N
+        +' 期共出现 '+keysU+' 个不同号码，本注命中 <b>'+hitU+'</b> 个'
+        +'（上限 '+lim2+' 个）。</div>';
+    }
+    h+='<div style="font-size:11px;margin-top:4px;color:'
+      +(rc.viol>0?'#c33':'var(--fg5)')+'">本注'
+      +(rc.viol>0?'⚠ 未完全达标（超出 '+rc.viol+' 个，生成时已取最接近的一注）':'✓ 达标')
+      +' · 口径：'+(isP2?'同位命中':(rc.strict?'并集合计':'逐期分别比'))
+      +' ≤ '+lim2+' 个。</div>';
+    h+='<div class="note" style="margin-top:5px">这只是<b>已发生的事实</b>：'
+      +'近几期开过的号与本注重合多寡，<b>不影响下期中奖概率</b>。</div>';
+  }else{
+    h+='<div style="font-size:11px;color:var(--fg5)">暂无近期开奖数据</div>';
+  }
   return h;
 }
 function guessToggle(i){ if(!S.guessOpen) S.guessOpen={}; S.guessOpen[i]=!S.guessOpen[i]; render(); }
@@ -6672,6 +6846,31 @@ function renderGuess(){
     h+='</select>';
   }
   h+='</div>';
+
+  /* ─── 近 N 期避重：默认逐期（A），可选并集严格（B） ─── */
+  var rN=+S.guessRecentN||5, rM=+S.guessRecentM||2, rStrict=!!S.guessStrict;
+  h+='<div class="bar"><label>近 N 期避重</label>'
+   +'<select onchange="S.guessRecentN=+this.value;S.guessList=null;render()">';
+  var RNS=[3,5,10];
+  for(var rni=0;rni<RNS.length;rni++)
+    h+='<option value="'+RNS[rni]+'"'+(rN===RNS[rni]?' selected':'')+'>'+RNS[rni]+' 期</option>';
+  h+='</select><label>最多重合</label>'
+   +'<select onchange="S.guessRecentM=+this.value;S.guessList=null;render()">';
+  for(var rmi=1;rmi<=3;rmi++)
+    h+='<option value="'+rmi+'"'+(rM===rmi?' selected':'')+'>'+rmi+' 个</option>';
+  h+='</select><label>严格避重</label>'
+   +'<select onchange="S.guessStrict=(this.value===\'1\');S.guessList=null;render()">'
+   +'<option value="0"'+(!rStrict?' selected':'')+'>关（逐期）</option>'
+   +'<option value="1"'+(rStrict?' selected':'')+'>开（并集）</option>'
+   +'</select></div>';
+  h+='<div class="note" style="margin:0 12px 8px">'
+   +'<b>逐期（默认，A）</b>：与近 '+rN+' 期<b>每一期分别</b>比较，任意一期重合都不超过 '+rM+' 个。<br>'
+   +'<b>严格（B）</b>：与近 '+rN+' 期<b>出现过的全部号码</b>合计重合不超过 '+rM+' 个；'
+   +'条件很紧，且可用号码变少会让多注更容易撞号，'
+   +'试不出来时生成「最接近的一注」并在分析里标红，不会卡住。<br>'
+   +'<b>福彩3D / 排列三</b>：只有 10 个数字，并集口径几乎不可能满足，'
+   +'严格模式改用「同位命中 ≤ 1 且不复制近 '+rN+' 期任一期」；'
+   +'默认模式为同位命中 ≤ '+rM+' 位。<b>按位玩法建议把「最多重合」设为 1</b>。</div>';
   h+='<div style="padding:0 12px 10px"><button class="more" onclick="guessRun()">'
    +(S.guessList?'换一批':'生成号码')+'</button></div>';
 
@@ -6725,6 +6924,14 @@ function renderGuess(){
         +(pp?(tt/pp).toFixed(2):'0')+' 个，最多 '+mx+' 个。'
         +'重合越少，越不会出现「买两注其实差不多」的浪费。</div>';
     }
+    var rOK=0, rBad=0;
+    for(var _ri=0;_ri<L.length;_ri++){
+      if(L[_ri]._recent && L[_ri]._recent.viol===0) rOK++; else rBad++;
+    }
+    h+='<div class="note">近 '+rN+' 期避重（'+(rStrict?'并集':'逐期')
+      +' ≤ '+rM+' 个）：<b>'+rOK+'/'+L.length+' 注达标</b>'
+      +(rBad?('，'+rBad+' 注未完全达标（已取最接近的一注，点「分析」看逐期矩阵）'):'')
+      +'。<b>这只是号码形态，不改变中奖概率</b>。</div>';
     h+='<div class="note">号码可点「保存」进入「我的选号」，之后照常购买、核对。'
       +'再次点「换一批」会得到<b>不同</b>的一组——这正是因为它本质是随机的。</div>';
   }else{
@@ -6737,13 +6944,16 @@ function renderGuess(){
    +'<div class="note">对最近 24 期，每一期<b>只用该期之前的数据</b>按各偏好生成一注，'
    +'统计平均命中几个号。理论期望命中数 = '+(isP?'3 × 1/10 = <b>0.30</b>'
      :(d.redCount+' × '+d.redCount+'/'+d.redMax+' = <b>'+th.red.toFixed(2)+'</b>'))
-   +'。<br><b>重点看「形态典型」这一行</b>：它施加了上面全部形态约束，'
-   +'但命中数依然围绕理论值波动——这就是形态约束<b>不改变中奖概率</b>的直接证据。</div>';
+   +'。<br>新增<b>「近 '+rN+' 期避重」</b>一列：同一期再用当前避重口径'
+   +'（'+(rStrict?'并集':'逐期')+' ≤ '+rM+' 个）生成一注单独统计，'
+   +'避重所用的近几期同样只取该期<b>之前</b>的数据。<br>'
+   +'<b>重点看「形态典型」这一行和新增列</b>：施加了形态与避重约束后，'
+   +'命中数依然围绕理论值波动——这就是这些约束<b>不改变中奖概率</b>的直接证据。</div>';
   if(S.guessBT){
     h+='<div style="overflow-x:auto"><table class="tb"><thead><tr>'
       +'<th>偏好</th><th>平均命中'+(isP?'位数':'红球')+'</th>'
       +(isP?'':'<th>平均命中'+esc(d.blueLabel||'蓝球')+'</th>')
-      +'<th>与理论值偏差</th></tr></thead><tbody>';
+      +'<th>近 '+rN+' 期避重</th><th>与理论值偏差</th></tr></thead><tbody>';
     var best=null, worst=null;
     for(var bi=0;bi<STRS.length;bi++){
       var key=STRS[bi][0], r=S.guessBT[key];
@@ -6751,21 +6961,28 @@ function renderGuess(){
       var dev=r.red-th.red, nm=guessStratName(key);
       if(best===null||dev>best.dev) best={k:nm,dev:dev,v:r.red,n:r.n};
       if(worst===null||dev<worst.dev) worst={k:nm,dev:dev,v:r.red,n:r.n};
+      var rdv=(r.rRed===null||r.rRed===undefined)?null:(r.rRed-th.red);
       h+='<tr><td>'+nm+'</td>'
         +'<td><b>'+r.red.toFixed(2)+'</b></td>'
         +(isP?'':'<td>'+r.blue.toFixed(2)+'</td>')
+        +'<td>'+(rdv===null?'—':'<b>'+r.rRed.toFixed(2)+'</b>'
+          +' <span style="font-size:11px;color:'+(Math.abs(rdv)<0.25?'#888':'#c33')+'">'
+          +(rdv>=0?'+':'')+rdv.toFixed(2)+'</span>')+'</td>'
         +'<td style="color:'+(Math.abs(dev)<0.25?'#888':'#c33')+'">'
         +(dev>=0?'+':'')+dev.toFixed(2)+'</td></tr>';
     }
     h+='<tr style="background:var(--surface2)"><td><b>理论值</b></td>'
       +'<td><b>'+th.red.toFixed(2)+'</b></td>'
-      +(isP?'':'<td>'+th.blue.toFixed(2)+'</td>')+'<td>—</td></tr>';
+      +(isP?'':'<td>'+th.blue.toFixed(2)+'</td>')
+      +'<td><b>'+th.red.toFixed(2)+'</b></td><td>—</td></tr>';
     h+='</tbody></table></div>';
     var span=best&&worst?(best.v-worst.v):0;
     h+='<div class="note">每种偏好各模拟 '+(best.n||0)+' 次，最高 '+best.v.toFixed(2)+'（'+best.k
       +'），最低 '+worst.v.toFixed(2)+'（'+worst.k+'），差距 '+span.toFixed(2)+' 个号。'
       +'<br>多回放几次你会发现：<b>名次每次都在变</b>——这正是随机波动的特征，'
-      +'说明没有任何一种偏好（包括形态典型）真正优于机选。'
+      +'说明没有任何一种偏好（包括形态典型）真正优于机选。<br>'
+      +'<b>新增的避重列同样围绕理论值波动</b>——加上「与近几期不重号」这条约束，'
+      +'命中数也没有变高，它只让号码看起来不像刚开过的那几期。'
       +'这是本页想让你看到的事实，而不是它的缺陷。</div>';
     h+='<div style="padding:0 12px 10px"><button class="more" onclick="guessRunBT()">重新回放</button></div>';
   }else{

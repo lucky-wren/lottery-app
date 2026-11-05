@@ -57,7 +57,7 @@
 
 **Actions** → **定时刷新彩票数据** → **Run workflow** → **Run workflow**。
 
-这一步会验证云函数连通性、抓取四彩种、生成产物并推送；`dist/单文件版/**` 的提交会自动触发部署工作流。之后 **Actions** → **部署到 GitHub Pages** 跑完，站点即可访问。
+这一步会验证云函数连通性、抓取四彩种、生成产物并推送，并由工作流显式触发部署工作流。之后 **Actions** → **部署到 GitHub Pages** 跑完，站点即可访问。
 
 ---
 
@@ -101,7 +101,8 @@ GitHub Actions 的 runner 出口 IP 在境外，彩票站按 IP 段风控，直�
 2. **检查云代理配置与连通性**：Secret 缺失会直接报红；否则请求 `?lot=ssq&n=1` 确认云函数可达
 3. `python3 cron_refresh.py --poll-minutes 12`：按开奖日轮询，直到官方最新期号变化
 4. 提交 `dist/`；无变化时写一个心跳提交（公开仓库 60 天无 activity 会被静默禁用定时任务）
-5. 任一彩种抓取失败都让 job 变红，已成功的部分照常写入
+5. 用 `gh workflow run deploy-pages.yml` 显式触发部署工作流
+6. 任一彩种抓取失败都让 job 变红，已成功的部分照常写入
 
 `LOTTERY_PROXY` 作为 job 级环境变量注入，同一份值被 `crawler.py`（转发请求）和 `build_single.py`（构建期常量）读取。
 
@@ -134,11 +135,13 @@ refresh-data.yml
        ├─ crawler.py  ──(经境内云函数)──> 官方接口
        ├─ dist/static_site/data/*.json（合并后的全量数据）
        └─ build_single.py → dist/单文件版/彩票统计.html
-                                └─ push 触发 deploy-pages.yml
+                                └─ workflow_dispatch 触发 deploy-pages.yml
                                      └─ _site/index.html → GitHub Pages
 ```
 
-`deploy-pages.yml` 只做一件事：把 `dist/单文件版/彩票统计.html` 复制成 `_site/index.html`，校验文件里含 `EMBEDDED_DATA` 标记后上传并发布。触发条件是 `dist/单文件版/**` 的提交或手动 Run。
+`deploy-pages.yml` 只做一件事：把 `dist/单文件版/彩票统计.html` 复制成 `_site/index.html`，校验文件里含 `EMBEDDED_DATA` 标记后上传并发布。触发条件是手动 Run，或 `refresh-data.yml` 末尾的 `workflow_dispatch` 调用。
+
+> 使用 `GITHUB_TOKEN` 推送的提交不会触发新的 workflow 运行，也不会触发 Pages 生成。因此 `refresh-data.yml` 在推送后显式调用部署工作流，不能依赖 `on: push` 的 `dist/单文件版/**` 路径过滤。
 
 构建期还会把 Secret 地址写成产物里的 `PX_BUILTIN` 常量，仅在「数据来源」弹窗里显示通道状态，不参与取数。
 
@@ -162,6 +165,7 @@ refresh-data.yml
 | Secret 已生效 | 定时工作流「检查云代理配置与连通性」打印 `云函数自检 HTTP 200` |
 | 抓取成功 | 定时工作流日志里四彩种都输出期数与最新期号，且 `CHANGED=yes` 或无变化心跳 |
 | 产物已提交 | 仓库 `dist/单文件版/彩票统计.html` 的提交时间更新 |
+| 部署被触发 | 定时工作流末尾打印 `已触发 部署到 GitHub Pages` |
 | 部署成功 | **部署到 GitHub Pages** 工作流绿灯 |
 | 页面最新 | 强刷后顶部「数据更新于」为刚才的构建时间，最新一期摘要正确 |
 
@@ -178,6 +182,7 @@ refresh-data.yml
 | 数据没变化但工作流全绿 | 官方还没出新期；或抓取回落到过期缓存 | 看日志里 `CHANGED=` 与每个彩种的期号输出 |
 | 推送失败 `permission denied` | Workflow permissions 是只读 | 改为 **Read and write permissions** |
 | 页面看不到更新 | Service Worker 缓存 | Ctrl+F5，或清站点数据 |
+| 仓库产物已更新但页面数据仍是旧的 | `GITHUB_TOKEN` 推送不会触发部署工作流 | 手动 Run 一次「部署到 GitHub Pages」；长期使用请换成本包里带显式触发步骤的 `refresh-data.yml` |
 | 定时任务长期不跑 | 公开仓库 60 天无 activity 被禁用 | 工作流每天写心跳提交；长时间停跑后手动 Run 一次恢复 |
 
 ---
