@@ -375,7 +375,7 @@ body.dark .toastbox{background:rgba(240,240,240,.94);color:#1a1a1a}
     <div class="sideitem" onclick="closeSide();showHelp()">功能说明<em>各页面怎么看</em></div>
     <div class="sideitem" onclick="closeSide();showSource()">数据来源<em>官方接口</em></div>
     <div class="sideitem" onclick="closeSide();showPwa()">添加到桌面<em>像 App 一样打开</em></div>
-    <div class="sideitem" onclick="refreshData()">刷新数据<em>强制重新抓取</em></div>
+    <div class="sideitem" onclick="refreshData()">数据更新<em>在线更新 / 重新抓取</em></div>
     <div class="sideitem" onclick="closeSide();toggleTheme()">显示模式<em id="m-theme">浅色</em></div>
     <div id="side-lic" class="sideitem" onclick="closeSide();licShowInfo()" style="display:none">访问授权<em id="m-lic"></em></div>
     <div id="side-adm" class="sideitem" onclick="closeSide();admOpen()" style="display:none">管理员<em id="m-adm">未登录</em></div>
@@ -1195,7 +1195,7 @@ function load(lot, force){
     return api('/history?lot='+lot+(force?'&force=1':''));
   }).then(function(d){
     if(!d || !d.rows || !d.rows.length) throw new Error('空数据');
-    D[lot]=d; lcWrite(lot,d); return d;
+    D[lot]=d; ouApplyPatches(); lcWrite(lot,d); return d;
   });
 }
 function ensure(lot){
@@ -4115,11 +4115,243 @@ function renderMine(){
 /* ---------- 侧边栏 ---------- */
 function openSide(){ $('side').className='sidemask on'; }
 function closeSide(){ $('side').className='sidemask'; }
-function refreshData(){
-  closeSide();
+/* ================= 在线更新：浏览器端直连官方接口 =================
+   实测（2026-11-03）：
+     体彩 webapi.sporttery.cn  → access-control-allow-origin: *   可直连
+     福彩 www.cwl.gov.cn       → 无任何 CORS 头，且不支持 JSONP   需代理
+   直连用的是「你的网络」出口 IP（境内家庭宽带），不会被风控拦截；
+   而 GitHub Actions 用的是境外共享 IP 段，被按段封禁，退避重试无效。 */
+var OU_PROXY_KEY='lottery_ou_proxy';
+var OU_PATCH_KEY='lottery_ou_patch_';
+/* 代理来源三級：本机（管理员覆盖，仅本人可见）> 站点配置 proxy.json > 构建期内置 */
+var PX_BUILTIN='';
+var PX_REMOTE='';
+var PX_REMOTE_AT='';
+function ouPxLocal(){ try{ return (localStorage.getItem(OU_PROXY_KEY)||'').trim(); }catch(e){ return ''; } }
+function ouSetProxy(v){ try{ v=String(v||'').trim(); if(v) localStorage.setItem(OU_PROXY_KEY,v); else localStorage.removeItem(OU_PROXY_KEY); }catch(e){} }
+function pxBuiltin(){ return (typeof PX_BUILTIN==='string' && PX_BUILTIN.indexOf('@@')!==0 && PX_BUILTIN.indexOf('http')===0)?PX_BUILTIN:''; }
+function ouProxy(){ var v=ouPxLocal(); if(v) return v; if(PX_REMOTE) return PX_REMOTE; return pxBuiltin(); }
+function ouPxSrc(){ if(ouPxLocal()) return 'local'; if(PX_REMOTE) return 'remote'; if(pxBuiltin()) return 'builtin'; return ''; }
+function pxLoadRemote(cb){
+  function fin(){ if(cb) try{ cb(); }catch(e){} }
+  try{
+    if(!window.fetch || (location.protocol!=='http:' && location.protocol!=='https:')){ fin(); return; }
+    fetch('proxy.json?t='+Date.now(),{cache:'no-store'}).then(function(r){ return r.ok?r.json():null; })
+      .then(function(j){
+        if(j && typeof j.proxy==='string' && j.proxy.trim()){ PX_REMOTE=j.proxy.trim(); PX_REMOTE_AT=String(j.updated||'').trim(); }
+        fin();
+      }).catch(function(){ fin(); });
+  }catch(e){ fin(); }
+}
+function pxSrcHtml(){
+  var k=ouPxSrc();
+  if(!k) return '<span style="color:#c98a00">尚未配置，双色球 / 福彩3D 无法更新</span>';
+  var t={local:'<b style="color:#1a9c46">已由管理员配置</b>（本机）',
+         remote:'<b style="color:#1a9c46">已由管理员配置</b>（站点配置'+(PX_REMOTE_AT?(' · '+esc(PX_REMOTE_AT)):'')+'）',
+         builtin:'<b style="color:#1a9c46">已由管理员配置</b>（内置）'}[k];
+  return t+'，<b>可直接更新全部彩种</b>';
+}
+function pxExport(){
+  var px=ouPxLocal()||PX_REMOTE||pxBuiltin();
+  if(!px){ toast('请先填写代理地址'); return; }
+  var txt=JSON.stringify({proxy:px,updated:new Date().toISOString().slice(0,10)},null,2);
+  var h='<div class="mh">导出站点配置<span onclick="closeHelp()">\u00d7</span></div>';
+  h+='<div class="note" style="padding:10px 12px 0;font-size:12.5px">'
+    +'把下面内容存成 <b>proxy.json</b>，放到<b>网址版站点根目录</b>（与 index.html 同级），'
+    +'提交后<b style="color:#1a9c46">所有普通用户打开页面即可生效</b>，他们看不到输入框也不需要配置。<br>'
+    +'<span style="color:#888">单文件版（双击打开）读不到这个文件，需用「设置云代理并重建」脚本重新生成 html。</span></div>';
+  h+='<div style="padding:10px 12px 0"><textarea id="px-txt" class="pinp" rows="5" style="width:100%;box-sizing:border-box;font-size:12px">'+esc(txt)+'</textarea></div>';
+  h+='<div class="btns" style="margin:10px 12px 0">'
+    +'<button class="p" onclick="pxCopy()">复制</button>'
+    +'<button onclick="pxDownload()">下载 proxy.json</button></div>';
+  h+='<div class="btns" style="margin:16px 12px 12px"><button class="g" style="flex:1" onclick="refreshData()">返回</button></div>';
+  modalBox(h);
+}
+function pxCopy(){
+  var el=document.getElementById('px-txt'); if(!el) return;
+  try{ el.select(); document.execCommand('copy'); toast('已复制'); }catch(e){ toast('请手动复制'); }
+}
+function pxDownload(){
+  var el=document.getElementById('px-txt'); if(!el) return;
+  try{
+    var b=new Blob([el.value],{type:'application/json'});
+    var a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='proxy.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(a.href); },1000);
+  }catch(e){ toast('下载失败，请手动复制'); }
+}
+function ouPatchSave(lot, rows){
+  try{ localStorage.setItem(OU_PATCH_KEY+lot, JSON.stringify(rows||[])); }catch(e){}
+}
+function ouPatchRead(lot){
+  try{ var s=localStorage.getItem(OU_PATCH_KEY+lot); return s?JSON.parse(s):[]; }catch(e){ return []; }
+}
+function ouSort(rows){
+  return rows.sort(function(a,b){
+    var la=String(a[0]).length, lb=String(b[0]).length;
+    if(la!==lb) return la-lb;
+    return String(a[0])<String(b[0])?-1:(String(a[0])>String(b[0])?1:0);
+  });
+}
+var OU_GAME={dlt:{g:'85',pos:false,name:'大乐透'},pls:{g:'35',pos:true,name:'排列三'}};
+var OU_FC={ssq:{p:'ssq',pos:false,name:'双色球'},'3d':{p:'3d',pos:true,name:'福彩3D'}};
+
+function ouTcUrl(g,n){ return 'https://webapi.sporttery.cn/gateway/lottery/getHistoryPageListV1.qry?gameNo='+g+'&provinceId=0&pageSize='+n+'&isVerify=1&pageNo=1'; }
+function ouFcUrl(p,n){ return 'https://www.cwl.gov.cn/cwl_admin/front/cwlkj/search/kjxx/findDrawNotice?name='+p+'&issueCount='+n; }
+
+function ouFetchText(url, viaProxy){
+  if(viaProxy){
+    var p=ouProxy();
+    if(!p) return Promise.reject(new Error('NO_PROXY'));
+    return fetch(p+(p.indexOf('?')>=0?'&':'?')+'url='+encodeURIComponent(url),{cache:'no-store'})
+      .then(function(r){ if(!r.ok) throw new Error('代理 HTTP '+r.status); return r.text(); });
+  }
+  return fetch(url,{cache:'no-store'}).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); });
+}
+function ouParseTc(txt,pos){
+  var d=JSON.parse(txt), v=(d&&d.value)||{}, list=v.list||[], out=[], i, k;
+  for(i=0;i<list.length;i++){
+    var it=list[i], num=it.lotteryDrawNum, sp=(it.lotteryDrawResult||'').split(/\s+/), ns=[];
+    if(!num) continue;
+    for(k=0;k<sp.length;k++){ if(sp[k]!=='') ns.push(parseInt(sp[k],10)); }
+    if(pos){ if(ns.length!==3) continue; out.push([num,(it.lotteryDrawTime||'').slice(0,10),ns,[]]); }
+    else{
+      if(ns.length!==7) continue;
+      out.push([num,(it.lotteryDrawTime||'').slice(0,10),
+        ns.slice(0,5).sort(function(a,b){return a-b;}),
+        ns.slice(5).sort(function(a,b){return a-b;})]);
+    }
+  }
+  return out;
+}
+function ouParseFc(txt,pos){
+  var d=JSON.parse(txt), arr=(d&&d.result)||[], out=[], i, k;
+  for(i=0;i<arr.length;i++){
+    var it=arr[i], code=it.code, sp=(it.red||'').split(','), ns=[];
+    if(!code||!sp.length) continue;
+    for(k=0;k<sp.length;k++){ if(sp[k]!=='') ns.push(parseInt(sp[k],10)); }
+    if(pos){ if(ns.length!==3) continue; out.push([code,(it.date||'').slice(0,10),ns,[]]); }
+    else{
+      var b=parseInt(it.blue,10);
+      if(ns.length!==6||!b) continue;
+      out.push([code,(it.date||'').slice(0,10),ns.sort(function(a,b2){return a-b2;}),[b]]);
+    }
+  }
+  return out;
+}
+/* 把新增 rows 合并进 D[lot]；返回新增期数 */
+function ouMerge(lot,rows){
+  var d=D[lot]; if(!d||!d.rows) return 0;
+  var seen={}, i;
+  for(i=0;i<d.rows.length;i++) seen[String(d.rows[i][0])]=1;
+  var add=[];
+  for(i=0;i<rows.length;i++){ if(!seen[String(rows[i][0])]){ seen[String(rows[i][0])]=1; add.push(rows[i]); } }
+  if(!add.length) return 0;
+  d.rows=ouSort(d.rows.concat(add));
+  ouPatchSave(lot, ouPatchRead(lot).concat(add));
+  return add.length;
+}
+/* 拉取单个彩种，返回 {ok, add, msg} */
+function ouFetchOne(lot){
+  var proxy=ouProxy();
+  if(OU_GAME[lot]){
+    var g=OU_GAME[lot];
+    return ouFetchText(ouTcUrl(g.g,30),false).then(function(t){
+      return {ok:true,add:ouMerge(lot,ouParseTc(t,g.pos)),msg:''};
+    }).catch(function(e){ return {ok:false,add:0,msg:(e&&e.message)||String(e)}; });
+  }
+  var f=OU_FC[lot];
+  if(!proxy) return Promise.resolve({ok:false,add:0,msg:'NEED_PROXY'});
+  return ouFetchText(ouFcUrl(f.p,30),true).then(function(t){
+    return {ok:true,add:ouMerge(lot,ouParseFc(t,f.pos)),msg:''};
+  }).catch(function(e){ return {ok:false,add:0,msg:(e&&e.message)||String(e)}; });
+}
+function ouApplyPatches(){
+  var k;
+  for(k in OU_GAME){ if(D[k]) ouMerge(k, ouPatchRead(k)); }
+  for(k in OU_FC){ if(D[k]) ouMerge(k, ouPatchRead(k)); }
+}
+function ouRun(lots){
+  var seq=Promise.resolve(), res=[], i;
+  function step(lot){ seq=seq.then(function(){ return ouFetchOne(lot).then(function(r){ res.push({lot:lot,r:r}); }); }); }
+  for(i=0;i<lots.length;i++) step(lots[i]);
+  return seq.then(function(){ return res; });
+}
+function ouSavePx(){
+  var el=document.getElementById('ou-px');
+  ouSetProxy(el?el.value:'');
+  toast('已保存');
+  refreshData();
+}
+function ouGo(mode){
+  var el=document.getElementById('ou-px');
+  if(el) ouSetProxy(el.value);
+  var lg=document.getElementById('ou-log');
+  var lots = (mode===1)?['dlt','pls']:['dlt','pls','ssq','3d'];
+  if(lg) lg.innerHTML='正在请求官方接口…';
+  ouRun(lots).then(function(res){
+    var html='', i, any=false;
+    for(i=0;i<res.length;i++){
+      var nm=(OU_GAME[res[i].lot]||OU_FC[res[i].lot]).name, r=res[i].r;
+      if(r.ok){
+        any=true;
+        html+='<div>'+esc(nm)+'：<b style="color:#1a9c46">'+(r.add?('新增 '+r.add+' 期'):'已是最新')+'</b></div>';
+      }else if(r.msg==='NEED_PROXY'){
+        html+='<div>'+esc(nm)+'：<span style="color:#c98a00">需填代理地址</span></div>';
+      }else{
+        html+='<div>'+esc(nm)+'：<span style="color:#c33">失败</span> <span style="color:#999;font-size:12px">'+esc(r.msg)+'</span></div>';
+      }
+    }
+    if(any){ try{ lcWrite(S.lot, D[S.lot]); }catch(e){} }
+    html+='<div style="margin-top:8px;color:#888;font-size:12px">新数据已合并进页面；刷新页面后仍会保留。</div>';
+    if(lg) lg.innerHTML=html;
+    try{ render(); }catch(e){}
+  });
+}
+/* 原「强制重新抓取」逻辑：清空当前彩种本机缓存并重新加载 */
+function forceRefresh(){
   delete D[S.lot]; showLoading();
   load(S.lot,true).then(render).catch(function(e){ showError(e.message||String(e)); });
 }
+/* 数据更新总面板：在线更新 + 强制重新抓取 +（管理员）云代理配置 */
+function refreshData(){
+  closeSide();
+  var isAdm=false; try{ isAdm=admIn(); }catch(e){}
+  var px=ouProxy();
+  var h='<div class="mh">数据更新<span onclick="closeHelp()">\u00d7</span></div>';
+
+  h+='<div class="sec">\u5728\u7ebf\u66f4\u65b0 \u00b7 \u6d4f\u89c8\u5668\u76f4\u8fde\u5b98\u65b9\u63a5\u53e3</div>';
+  h+='<div class="note" style="padding:10px 12px 0;font-size:12.5px">'
+    +'\u7528<b>\u4f60\u81ea\u5df1\u7684\u7f51\u7edc</b>\u8bf7\u6c42\u5b98\u65b9\u63a5\u53e3\uff0c\u4e0d\u7ecf\u8fc7\u4efb\u4f55\u670d\u52a1\u5668\uff0c\u4e5f\u4e0d\u4f1a\u649e\u5883\u5916 IP \u7684\u98ce\u63a7\u3002<br>'
+    +'\u00b7 <b>\u5927\u4e50\u900f / \u6392\u5217\u4e09</b>\uff1a\u5b98\u65b9\u63a5\u53e3\u5f00\u653e\u8de8\u57df\uff0c<b style="color:#1a9c46">\u53ef\u76f4\u8fde</b>\uff0c\u65e0\u9700\u914d\u7f6e\u3002<br>'
+    +'\u00b7 <b>\u53cc\u8272\u7403 / \u798f\u5f693D</b>\uff1a\u5b98\u65b9\u63a5\u53e3\u4e0d\u5141\u8bb8\u8de8\u57df\uff1c\u9700\u4ee3\u7406\u3002</div>';
+  h+='<div id="ou-pxsrc" class="note" style="padding:6px 12px 0;font-size:12.5px">'+pxSrcHtml()+'</div>';
+  h+='<div class="btns" style="margin:10px 12px 0">'
+    +'<button class="p" onclick="ouGo(1)">\u53ea\u66f4\u65b0\u4f53\u5f69</button>'
+    +'<button onclick="ouGo(2)">\u5168\u90e8\u66f4\u65b0</button></div>';
+  h+='<div id="ou-log" style="padding:8px 12px 0;font-size:12.5px;line-height:1.9"></div>';
+
+  h+='<div class="sec">\u5f3a\u5236\u91cd\u65b0\u6293\u53d6</div>';
+  h+='<div class="note" style="padding:10px 12px 0">\u6e05\u7a7a<b>\u5f53\u524d\u5f69\u79cd</b>\u7684\u672c\u673a\u7f13\u5b58\u5e76\u91cd\u65b0\u52a0\u8f7d\u3002\u6570\u636e\u6ca1\u8ddf\u4e0a\u3001\u6216\u5728\u7ebf\u66f4\u65b0\u5931\u8d25\u65f6\u53ef\u4ee5\u8bd5\u3002</div>';
+  h+='<div class="btns" style="margin:10px 12px 0">'
+    +'<button class="g" onclick="closeHelp();forceRefresh()">\u91cd\u65b0\u6293\u53d6\u5f53\u524d\u5f69\u79cd</button></div>';
+
+  if(isAdm){
+    h+='<div class="sec">\u4e91\u4ee3\u7406\u5730\u5740 \u00b7 \u4ec5\u7ba1\u7406\u5458\u53ef\u89c1</div>';
+    h+='<div class="note" style="padding:10px 12px 0">\u53cc\u8272\u7403 / \u798f\u5f693D \u7684\u5b98\u65b9\u63a5\u53e3\u4e0d\u5141\u8bb8\u8de8\u57df\uff0c\u9700\u586b\u4e00\u4e2a<b>\u5883\u5185</b>\u4e91\u51fd\u6570\u5730\u5740'
+      +'\uff08\u817e\u8baf\u4e91 / \u963f\u91cc\u4e91 / \u534e\u4e3a\u4e91\u5747\u53ef\uff09\u3002<b>\u666e\u901a\u7528\u6237\u770b\u4e0d\u5230\u8fd9\u4e00\u6bb5</b>\u3002</div>';
+    h+='<div style="padding:10px 12px 0"><input id="ou-px" class="pinp" style="width:100%;box-sizing:border-box"'
+      +' placeholder="https://xxx.tencentscf.com" value="'+esc(px)+'"></div>';
+    h+='<div class="btns" style="margin:10px 12px 0">'
+      +'<button class="p" onclick="ouSavePx()">\u4fdd\u5b58\u5230\u672c\u673a</button>'
+      +(ouPxLocal()?'<button class="g" onclick="ouClearPx()">\u6e05\u9664\u672c\u673a</button>':'')
+      +'<button onclick="pxExport()">\u5bfc\u51fa\u7ad9\u70b9\u914d\u7f6e</button></div>';
+  }
+  h+='<div class="btns" style="margin:16px 12px 12px"><button class="g" style="flex:1" onclick="closeHelp();render()">\u5173\u95ed</button></div>';
+  modalBox(h);
+  pxLoadRemote(function(){ var e=$('ou-pxsrc'); if(e) e.innerHTML=pxSrcHtml(); });
+}
+function ouClearPx(){ ouSetProxy(''); toast('\u672c\u673a\u4ee3\u7406\u5df2\u6e05\u9664'); refreshData(); }
 function clearMyBets(){
   closeSide(); saveBets([]); if(S.tab==='mine') render();
 }
@@ -4169,6 +4401,8 @@ function showSource(){
    +'<h4>大乐透</h4><p>中国体育彩票官方接口（lottery.sporttery.cn）。</p>'
    +'<h4>当前数据</h4><p>'+(d? esc(d.name)+'：'+d.rows.length+' 期（'+d.rows[0][0]+' ~ '+d.rows[d.rows.length-1][0]+'）'
      :'尚未加载')+'</p>'
+   +'<h4>在线更新</h4><p>菜单「数据更新」里的<b>在线更新</b>可让浏览器直连官方接口补齐最新期；大乐透 / 排列三免配置，'
+   +'双色球 / 福彩3D 需境内代理。详见<b>功能说明 → 在线更新</b>。</p>'
    +'<h4>说明</h4><p>'+(typeof EMBEDDED_BUILD!=='undefined'&&EMBEDDED_BUILD?'本页面为离线单文件版，开奖数据已内置在文件中，打开即用、无需联网；数据源为官方接口，构建时抓取。':'页面本身不含任何内置数据，打开时实时抓取；服务端会缓存，')
    +'再次打开秒开。若官方接口临时不可用，会回退到上次缓存并提示。</p>'
    +'</div></div>');
@@ -4179,6 +4413,14 @@ var HELP_SEEN='lotteryHelpSeen';
 /* ① 功能说明拆成章节数组：原来 showHelp 是一个 300+ 行的巨型字符串拼接，
    改一个字要在字面量里找位置。现在每个章节独立成项，维护时只改对应那一条。 */
 var HELP_SECTIONS=[
+  {t:'在线更新', b:
+   '<p>菜单<b>「数据更新」</b>里的<b>在线更新</b>，让你的浏览器<b>直接</b>去官方接口取最新开奖结果，不经过任何中间服务器。同一面板里还有<b>强制重新抓取</b>（清空本机缓存重来）。</p>'
+   +'<p><b>为什么需要它</b>：自动抓取用的是境外服务器出口 IP，被彩票站按段风控（403 / 567），退避重试无效。而「在线更新」走的是'
+   +'<b>你自己的网络</b>（境内家庭宽带 / 手机流量），不会被拦。</p>'
+   +'<p><b>各彩种情况</b>：<br>· <b>大乐透、排列三</b>：官方接口开放跨域，<b style="color:#1a9c46">可直连更新</b>，无需任何配置。<br>'
+   +'· <b>双色球、福彩3D</b>：官方接口不允许跨域，需填写一个<b>境内代理地址</b>（云函数部署后获得）；未填则会跳过这两个彩种，不影响体彩更新。</p>'+'<p><b>代理只对管理员开放</b>：配置入口需<b>管理员登录</b>后才显示（菜单 → 管理员），普通用户看不到这一段，也无需配置。</p>'
+   +'<p>更新只会<b>补齐新增的期</b>，不会动已有数据；结果存在本机，刷新页面后仍保留。</p>'
+  },
  {t:'数据', b:
    '<p>开奖结果<b>实时</b>从官方接口抓取：双色球与福彩3D来自中国福彩网，大乐透与排列三来自中国体彩。首次打开稍慢，之后用缓存。顶部常驻显示<b>最新一期</b>'
    +'摘要与数据更新时间。</p><p><b>四种玩法</b>：顶部标签切换。<b>双色球</b>（6 红 + 1 蓝，1-33 / 1-16）、<b>大乐透</b>（5 前'
@@ -6939,6 +7181,7 @@ function warmAnalyze(){
 }
 function boot(){
   if(licBlocked()){ var mb=$('main'); if(mb) mb.innerHTML=renderLock(); licInitMenu(); return; }
+  pxLoadRemote();          /* 拉取站点配置 proxy.json，普通用户也能拿到管理员配好的代理 */
   ensure(S.lot).then(function(){
     render();
     setTimeout(warmAnalyze, 60);   /* 首屏出来后再预热，不拖慢首次渲染 */

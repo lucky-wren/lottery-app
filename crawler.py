@@ -20,10 +20,12 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 TTL = int(os.environ.get("LOTTERY_TTL", "21600"))
 
 # 并发页数：太高会触发体彩 WAF，6~8 较稳
-MAX_WORKERS = int(os.environ.get("LOTTERY_WORKERS", "10"))
+MAX_WORKERS = int(os.environ.get("LOTTERY_WORKERS", "4"))
 
 # 增量更新时抓取的页数（每页 100 期）
-INCREMENT_PAGES = int(os.environ.get("LOTTERY_INC_PAGES", "3"))
+INCREMENT_PAGES = int(os.environ.get("LOTTERY_INC_PAGES", "1"))
+# 福彩增量取最近多少期（体彩按页，福彩按条）
+INCREMENT_COUNT = int(os.environ.get("LOTTERY_INC_COUNT", "60"))
 
 _mem = {}
 
@@ -47,7 +49,7 @@ def _is_ip_block(e):
     return ('403' in s) or ('567' in s) or ('Forbidden' in s)
 
 
-def _retry(fn, tries=8, base=0.25):
+def _retry(fn, tries=6, base=1.2):
     """概率性 403 的重试封装。
 
     遇到 403 / 567 这类 IP 级封禁时只试 2 次就放弃并抛 IPBlocked，
@@ -69,7 +71,8 @@ def _retry(fn, tries=8, base=0.25):
                     raise IPBlocked(
                         "出口 IP 疑似被风控拦截（%s）。重试无效，已停止请求以免加重封禁。" % e
                     )
-        time.sleep(base + 0.15 * i + random.random() * 0.2)
+        # 退避加长：被风控时高频重试只会把封禁拖更久
+        time.sleep(base + 0.9 * i + random.random() * 0.6)
     raise RuntimeError("抓取失败（已重试 %d 次）: %s" % (tries, last))
 
 
@@ -142,9 +145,14 @@ def _dlt_pool(lst):
             "amount": pool, "sales": _num(it.get("totalSaleAmount")), "top": top}
 
 
-def fetch_ssq():
-    """双色球：福彩官方，一次可取全部历史"""
-    url = "https://www.cwl.gov.cn/cwl_admin/front/cwlkj/search/kjxx/findDrawNotice?name=ssq&issueCount=3000"
+def fetch_ssq(count=None):
+    """双色球：福彩官方，一次可取全部历史
+
+    count 给定时只取最近 count 期（增量更新用），大幅缩小响应体、
+    降低触发风控的概率。
+    """
+    url = ("https://www.cwl.gov.cn/cwl_admin/front/cwlkj/search/kjxx/findDrawNotice?"
+           "name=ssq&issueCount=%d" % (count or 3000))
 
     def go():
         raw = _http(url, {
@@ -407,11 +415,13 @@ def fetch_dlt_recent(pages=3):
 
 
 
-def fetch_3d():
+def fetch_3d(count=None):
     """福彩 3D：福彩官方接口，一次可取全部历史（约 4791 期）
     玩法特点：3 位数字、每位 0-9、可重复、有顺序（百/十/个）
+    count 给定时只取最近 count 期（增量更新用）
     """
-    url = "https://www.cwl.gov.cn/cwl_admin/front/cwlkj/search/kjxx/findDrawNotice?name=3d&issueCount=8000"
+    url = ("https://www.cwl.gov.cn/cwl_admin/front/cwlkj/search/kjxx/findDrawNotice?"
+           "name=3d&issueCount=%d" % (count or 8000))
 
     def go():
         raw = _http(url, {
@@ -555,9 +565,18 @@ def _merge(old, new):
     new["rows"] = rows
     if not new.get("pool") and (old or {}).get("pool"):
         new["pool"] = old["pool"]
-    # 奖池序列：抓不到时保留旧的，避免走势图被清空
-    if not new.get("poolHist") and (old or {}).get("poolHist"):
-        new["poolHist"] = old["poolHist"]
+    # 奖池序列：增量抓取只带回最近几期，直接覆盖会把已有的 120 期截断，
+    # 因此改为按期号合并去重后再截断，走势图不会被清空或变短。
+    oh = (old or {}).get("poolHist") or []
+    nh = new.get("poolHist") or []
+    if nh and oh:
+        base2 = {str(r[0]): r for r in oh}
+        for r in nh:
+            base2[str(r[0])] = r
+        merged2 = sorted(base2.values(), key=lambda r: (len(str(r[0])), str(r[0])))
+        new["poolHist"] = merged2[-POOL_HIST_N:]
+    elif not nh and oh:
+        new["poolHist"] = oh
     new["_t"] = time.time()
     return new
 
@@ -577,13 +596,23 @@ def get_data(lot, force=False):
 
     old = _load_disk(lot) if not force else None
 
-    # 增量：已有全量缓存时，只抓最新几页（大乐透全量很慢）
-    if old and len(old["rows"]) > 500 and lot == "dlt":
+    # 增量：已有全量缓存时只抓最近几期，请求量从「全量」降到「个位数」
+    if old and len(old["rows"]) > 500:
         try:
-            head = fetch_dlt_recent(pages=INCREMENT_PAGES)
-            merged = _merge(old, head)
-            _save(lot, merged)
-            return merged, "live"
+            if lot == "dlt":
+                head = fetch_dlt_recent(pages=INCREMENT_PAGES)
+            elif lot == "pls":
+                head = fetch_pls(max_pages=INCREMENT_PAGES)
+            elif lot == "ssq":
+                head = fetch_ssq(count=INCREMENT_COUNT)
+            elif lot == "3d":
+                head = fetch_3d(count=INCREMENT_COUNT)
+            else:
+                head = None
+            if head and head.get("rows"):
+                merged = _merge(old, head)
+                _save(lot, merged)
+                return merged, "live"
         except Exception:      # noqa
             pass               # 增量失败则退回全量
 

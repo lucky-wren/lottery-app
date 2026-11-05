@@ -83,6 +83,21 @@ def build():
     html = open(os.path.join(BASE, "static", "index.html"),
                 encoding="utf-8").read()
 
+    # 云代理内置：--proxy=URL（off 表示清除）。
+    # 单文件版双击打开时读不到 proxy.json，只能靠构建期写入内置常量，
+    # 这样管理员生成一次 html，所有拿到这个文件的人都能更新双色球/福彩3D。
+    px = ""
+    for a in sys.argv[1:]:
+        if a.startswith("--proxy="):
+            px = a.split("=", 1)[1].strip()
+    if px == "off":
+        px = ""
+    html = html.replace("@@PX_BUILTIN@@", px, 1)
+    if px:
+        log("内置云代理: %s" % px)
+    else:
+        log("内置云代理: 未设置（可用 --proxy=URL 写入）")
+
     payload = {}
     for lot in LOTS:
         payload[lot] = json.load(
