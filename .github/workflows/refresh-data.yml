@@ -1,7 +1,9 @@
 name: 定时刷新彩票数据
 
 # 每天按开奖日抓一次 + 次日兜底一次，抓完重新生成单文件版并推送，
-# dist/单文件版/** 的提交会自动触发 deploy-pages.yml 发布到 Pages。
+# 再用 workflow_dispatch 显式触发 deploy-pages.yml 发布到 Pages。
+# 注意：GITHUB_TOKEN 推送的提交不会触发新的 workflow 运行，
+# 不能依赖 dist/单文件版/** 的 push 事件来部署。
 #
 # 官方接口统一经境内云函数转发，避免 GitHub runner 的境外出口 IP
 # 被彩票站按段风控（403 / 567）。云函数地址放在仓库 Secret LOTTERY_PROXY。
@@ -29,6 +31,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: lottery-refresh
@@ -108,6 +111,16 @@ jobs:
           git add dist/
           git diff --staged --quiet || git commit -m "chore(data): 自动刷新开奖数据 $(TZ='Asia/Shanghai' date '+%F %H:%M')"
           git push
+
+      - name: 触发 Pages 部署
+        if: steps.gen.outputs.changed != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # GITHUB_TOKEN 产生的 push 事件不会创建新的 workflow run，
+          # 但 workflow_dispatch 是例外，用 gh 显式调用即可。
+          gh workflow run deploy-pages.yml --ref main
+          echo "已触发 部署到 GitHub Pages"
 
       # 公开仓库 60 天无 activity 会被静默禁用定时任务，
       # 每天留一个 commit 保活；dist/** 已被 paths-ignore 排除，不会循环触发。
