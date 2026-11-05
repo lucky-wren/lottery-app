@@ -22,6 +22,12 @@ TTL = int(os.environ.get("LOTTERY_TTL", "21600"))
 # 并发页数：太高会触发体彩 WAF，6~8 较稳
 MAX_WORKERS = int(os.environ.get("LOTTERY_WORKERS", "4"))
 
+# 境内云函数地址：由仓库 Secret LOTTERY_PROXY 在 CI 构建期注入。
+# 设置后所有官方请求都会改成 <proxy>?url=<官方地址> 转发，
+# 出口 IP 落在境内，避开 GitHub runner 所在境外 IP 段的 403 / 567 风控。
+# 本地不设置时保持直连，方便在本机抓数据。
+PROXY_URL = (os.environ.get("LOTTERY_PROXY") or "").strip()
+
 # 增量更新时抓取的页数（每页 100 期）
 INCREMENT_PAGES = int(os.environ.get("LOTTERY_INC_PAGES", "1"))
 # 福彩增量取最近多少期（体彩按页，福彩按条）
@@ -31,6 +37,16 @@ _mem = {}
 
 
 def _http(url, headers, timeout=25):
+    if PROXY_URL:
+        from urllib.parse import quote
+        sep = "&" if "?" in PROXY_URL else "?"
+        target = PROXY_URL + sep + "url=" + quote(url, safe="")
+        req = urllib.request.Request(target, headers={
+            "User-Agent": headers.get("User-Agent", UA[0]),
+            "Accept": "application/json, text/plain, */*",
+        })
+        # 云函数内部还要再请求一次官方接口，超时给足
+        return urllib.request.urlopen(req, timeout=max(timeout, 60)).read()
     req = urllib.request.Request(url, headers=headers)
     return urllib.request.urlopen(req, timeout=timeout).read()
 

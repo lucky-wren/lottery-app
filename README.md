@@ -1,134 +1,205 @@
 # 彩票统计 · GitHub Pages 部署说明
 
-## 一、部署后的页面是什么
+本仓库是一个**自动更新的静态站点**：定时工作流在云端抓取开奖数据，重新生成单文件页面，再由部署工作流发布到 GitHub Pages。页面数据已内嵌在 HTML 里，访客打开即用、不需要联网取数，也不需要任何配置。
 
-GitHub Pages 的页面由 `.github/workflows/deploy-pages.yml` 发布：工作流把 `dist/单文件版/彩票统计.html` 复制为 `_site/index.html`，再通过 `actions/upload-pages-artifact@v3` 与 `actions/deploy-pages@v4` 提交为 Pages Artifact。
+访问地址：`https://<用户名>.github.io/<仓库名>/`
 
-该 HTML 已把四彩种开奖数据内嵌在文件里，打开即是完整工具，不依赖运行时的数据请求。访问地址为：
+---
 
-```
-https://<用户名>.github.io/<仓库名>/
-```
-
-工作流使用 Pages Artifact 发布，因此 **Settings → Pages → Build and deployment → Source 选择 GitHub Actions**。
-
-## 二、仓库目录说明
+## 一、仓库目录说明
 
 | 路径 | 作用 |
 |---|---|
-| `.github/workflows/deploy-pages.yml` | 发布单文件版到 GitHub Pages |
-| `.github/workflows/refresh-data.yml` | 定时抓取开奖数据并更新 `dist/` |
-| `static/index.html` | 网页源码，构建单文件版时读取 |
-| `dist/单文件版/彩票统计.html` | 数据内嵌的正式成品，Pages 发布的就是它 |
-| `dist/static_site/data/*.json` | 构建链读写的数据副本 |
-| `data/ssq.json`、`dlt.json`、`3d.json`、`pls.json` | 网址版首页运行时读取的数据 |
-| `index.html` | 网址版首页，运行时 `fetch('./data/<彩种>.json')` |
-| `manifest.json`、`sw.js`、`icon-192.png`、`icon-512.png`、`apple-touch-icon.png` | PWA 图标与缓存控制 |
-| `.nojekyll` | 让静态文件原样发布，跳过 Jekyll 处理 |
-| `build_single.py`、`pwa_assets.py`、`build_static.py` | 生成单文件版与网址版的构建脚本 |
-| `crawler.py`、`cron_refresh.py`、`requirements.txt` | 抓取官方接口、增量合并、定时任务入口 |
-| `tools/cloud_proxy.py` | 福彩数据在线更新用的云函数源码 |
-| `tools/云代理部署说明.md` | 云函数部署与配置步骤 |
-| `Dockerfile`、`Procfile`、`railway.json`、`render.yaml`、`vercel.json`、`start.sh` 等 | 其他部署方式的配置文件，Pages 构建不读取 |
-| `一键更新并推送.bat`、`刷新数据.bat`、`启动本地服务.bat` 等 | Windows 下手动刷新与推送的工具 |
+| `.github/workflows/refresh-data.yml` | 定时抓取数据、重建产物、推送提交 |
+| `.github/workflows/deploy-pages.yml` | 把单文件版发布为 Pages 首页 |
+| `cron_refresh.py` | 定时工作流入口：轮询等开奖、合并数据、触发构建 |
+| `crawler.py` | 抓取四个彩种官方接口；请求经境内云函数转发 |
+| `build_single.py` | 把数据烤进 HTML，生成单文件版 |
+| `build_static.py` | 生成网址版站点（`dist/static_site/`） |
+| `pwa_assets.py` | manifest、图标、Service Worker |
+| `static/index.html` | 页面源码（所有功能都在这里） |
+| `dist/单文件版/彩票统计.html` | **Pages 实际发布的文件**，数据内嵌 |
+| `dist/static_site/data/*.json` | 四彩种数据文件，增量合并的基准 |
+| `cloud_proxy.py` | 境内云函数源码（也给到 `tools/` 一份） |
+| `云代理部署说明.md` | 云函数逐屏部署、验证与排错 |
+| `requirements.txt` | 定时工作流安装的 Python 依赖 |
 
-`deploy-pages.yml` 发布 `dist/单文件版/彩票统计.html`；根目录的 `index.html` 与 `data/` 供网址版使用，在本发布方式下不参与 Pages 构建。Pages 产物只有 `_site/`，仓库里的源码、脚本与文档不会作为网页对外提供。
+`dist/` 下的产物要提交进仓库：它既是定时抓取的合并基准，也是 Pages 的发布来源。
 
-## 三、首次部署步骤
+---
 
-1. 把仓库文件上传到 `main` 分支根目录，保持 `.github/`、`data/`、`dist/`、`static/`、`tools/` 的目录层级。
-2. 打开 **Settings → Pages → Build and deployment → Source**，选择 **GitHub Actions**。
-3. 打开 **Settings → Actions → General → Workflow permissions**，选择 **Read and write permissions**。`refresh-data.yml` 需要把刷新结果提交回仓库。
-4. 打开 **Actions**，选中 `部署到 GitHub Pages`，点 **Run workflow** 手动运行一次；向 `dist/单文件版/**` 推送变更时也会自动触发。
-5. 等待约 1~2 分钟，访问 `https://<用户名>.github.io/<仓库名>/`。
+## 二、一次性配置
 
-若仓库是 fork，需要在 Actions 页面先启用工作流；定时工作流在 fork 中默认不运行。
+### 1. 配置仓库 Secret `LOTTERY_PROXY`
 
-## 四、deploy-pages.yml
+云函数地址是**唯一需要配置的东西**。
 
-| 项 | 内容 |
-|---|---|
-| 触发条件 | `push` 且 `paths: dist/单文件版/**`；`workflow_dispatch` 手动 |
-| 必需文件 | `dist/单文件版/彩票统计.html` |
-| 主要步骤 | `actions/checkout` → 建立 `_site/` → 复制成品为 `_site/index.html` → `actions/upload-pages-artifact@v3` → `actions/deploy-pages@v4` |
-| 产物 | Pages Artifact，部署后即为站点首页 |
+仓库 → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**：
 
-只要 `dist/单文件版/彩票统计.html` 存在，工作流即可完成。数据刷新导致该文件变化时，发布会自动触发。
+- Name：`LOTTERY_PROXY`
+- Secret：函数 URL 地址，形如 `https://125xxxxxxx-abcdefgh.ap-guangzhou.tencentscf.com`
 
-## 五、refresh-data.yml
+末尾**不要带 `?url=`**。云函数的部署步骤见 `云代理部署说明.md`，源码在 `cloud_proxy.py`。
 
-| 项 | 内容 |
-|---|---|
-| 定时 | UTC `13:43`、`01:13`（北京时间 21:43、09:13），开奖日轮询等待官方放出新期号 |
-| 手动 | `workflow_dispatch` |
-| 主要步骤 | `actions/checkout` → `setup-python` → `pip install -r requirements.txt` → `python3 cron_refresh.py --poll-minutes` → `git add dist/` 并提交 |
-| 心跳提交 | 数据无变化时写 `dist/.last-check` 并提交，保持仓库活动，避免公开仓库长时间无提交时定时任务被停用 |
-| 依赖文件 | `requirements.txt`、`cron_refresh.py`、`crawler.py`、`static/index.html`、`build_single.py`、`pwa_assets.py`、`dist/static_site/data/*.json` |
+### 2. Pages Source 选 GitHub Actions
 
-GitHub Actions 的出口 IP 位于境外，彩票官方接口可能返回 403 / 567 等风控响应，遇到时该次抓取会失败。数据兜底方式见第七节。
+仓库 → **Settings** → **Pages** → **Build and deployment** → **Source** 选 **GitHub Actions**。
 
-## 六、构建链
+部署工作流用 `actions/deploy-pages@v4` 上传 Pages Artifact，必须选这一项；不要选 `Deploy from a branch`。
+
+### 3. Workflow permissions
+
+仓库 → **Settings** → **Actions** → **General** → **Workflow permissions** 选 **Read and write permissions**，并保存。
+
+定时工作流需要把更新后的 `dist/` 提交回仓库，只读权限会推送失败。
+
+### 4. 手动跑一次
+
+**Actions** → **定时刷新彩票数据** → **Run workflow** → **Run workflow**。
+
+这一步会验证云函数连通性、抓取四彩种、生成产物并推送；`dist/单文件版/**` 的提交会自动触发部署工作流。之后 **Actions** → **部署到 GitHub Pages** 跑完，站点即可访问。
+
+---
+
+## 三、云函数（境内转发）
+
+GitHub Actions 的 runner 出口 IP 在境外，彩票站按 IP 段风控，直接抓官方接口会返回 403 / 567。云函数部署在境内，出口 IP 不在被封的段里。
+
+抓取脚本把每个官方请求改写成：
 
 ```
-cron_refresh.py
-  ├─ crawler.py                         抓取官方接口
-  ├─ dist/static_site/data/*.json       读旧期号、写新数据
-  └─ build_single.py                    重新生成单文件版
-       ├─ static/index.html             网页源码
-       ├─ dist/static_site/data/*.json  内嵌进 HTML 的数据
-       └─ pwa_assets.py                 内嵌 PWA 图标
-            ↓
-     dist/单文件版/彩票统计.html  →  deploy-pages.yml 发布
+<函数地址>?url=<URL 编码后的官方接口地址>
 ```
 
-`crawler.py` 采用增量抓取，只取新增期数；合并时保留已有奖池序列，避免长周期走势被截断。
+云函数代请求官方接口，把原文返回给脚本。`cloud_proxy.py` 里写死了域名白名单，只放行 `www.cwl.gov.cn`、`cwl.gov.cn`、`webapi.sporttery.cn`、`www.sporttery.cn`，避免被当作开放代理滥用。
 
-## 七、数据更新方式
+函数 URL 建议配置：
 
-| 范围 | 方式 |
+- 授权类型：**开放**（匿名访问，定时工作流不携带凭证）
+- CORS：**不启用**，跨域由源码返回的响应头处理；若启用，Allow-Origin 填 `*`、Allow-Methods 勾 `GET`、Expose-Headers 不要留空
+- 执行超时：**60 秒**（默认 3 秒会在冷启动时超时）
+- 触发器：保持「暂不创建」，建好函数后单独创建函数 URL
+
+验证：浏览器打开 `https://你的地址/?lot=ssq&n=3`，返回双色球 JSON 即可。详细逐屏配置与排错见 `云代理部署说明.md`。
+
+---
+
+## 四、定时抓取工作流 `refresh-data.yml`
+
+触发方式：
+
+| 方式 | 时间（北京） | 用途 |
+|---|---|---|
+| schedule | 21:43 | 晚于各彩种开奖时刻，配合轮询等官方出数据 |
+| schedule | 次日 09:13 | 兜底，补前一天的漏网之鱼 |
+| workflow_dispatch | 手动 | 随时可跑，可指定轮询分钟数（默认 12） |
+| push 到 main | 代码变更时 | `dist/**` 与 `*.md` 被排除，不会自我循环 |
+
+工作流步骤：
+
+1. 拉取代码、配置 Python 3.11、安装 `requirements.txt`
+2. **检查云代理配置与连通性**：Secret 缺失会直接报红；否则请求 `?lot=ssq&n=1` 确认云函数可达
+3. `python3 cron_refresh.py --poll-minutes 12`：按开奖日轮询，直到官方最新期号变化
+4. 提交 `dist/`；无变化时写一个心跳提交（公开仓库 60 天无 activity 会被静默禁用定时任务）
+5. 任一彩种抓取失败都让 job 变红，已成功的部分照常写入
+
+`LOTTERY_PROXY` 作为 job 级环境变量注入，同一份值被 `crawler.py`（转发请求）和 `build_single.py`（构建期常量）读取。
+
+---
+
+## 五、增量抓取与合并
+
+`cron_refresh.py` 先把仓库里已有的 `dist/static_site/data/*.json` 预填到抓取器的磁盘缓存，再以增量模式运行：
+
+| 彩种 | 每次抓取量 |
 |---|---|
-| 大乐透 / 排列三 | 页面菜单 → 数据更新 → 「只更新体彩（免代理）」，浏览器直连官方接口，走访客自己的网络 |
-| 双色球 / 福彩3D | 管理员配置云代理后导出 `proxy.json` 放到站点根目录，普通用户打开页面即自动生效 |
-| 全量重抓 | 本地运行 `刷新数据.bat` / `一键更新并推送.bat`，用本机境内 IP 抓取后推送仓库 |
-| 自动 | `refresh-data.yml` 定时执行，成功后由 `deploy-pages.yml` 重新发布 |
+| 双色球、福彩3D | 最近 60 期 |
+| 大乐透、排列三 | 最近 1 页（100 期） |
 
-四彩种当前数据：双色球 2082 期、大乐透 2942 期、福彩3D 4795 期、排列三 7765 期。
+抓到的新期与已有全量数据按期号合并去重，奖池序列也合并后截断到最近 120 期。这样云函数只需转发小响应，不会因全量历史过大而超时。
 
-## 八、云代理（可选）
+保护逻辑：
 
-福彩官方接口不开放跨域，双色球与福彩3D 的浏览器在线更新需要云函数转发；体彩接口开放跨域，无需代理。
+- 官方最新期号没变就不写入
+- 抓取失败回落到过期缓存时，CI 判定为失败，不拿旧数据冒充新数据
+- 抓到的期号比仓库已有的还旧，直接放弃本次更新
 
-`proxy.json` 放在站点根目录、与 `index.html` 同级：
+---
 
-```json
-{"proxy": "https://xxxx.ap-guangzhou.tencentscf.com/", "updated": "2026-11-05"}
+## 六、构建链与部署
+
+```
+refresh-data.yml
+  └─ cron_refresh.py
+       ├─ crawler.py  ──(经境内云函数)──> 官方接口
+       ├─ dist/static_site/data/*.json（合并后的全量数据）
+       └─ build_single.py → dist/单文件版/彩票统计.html
+                                └─ push 触发 deploy-pages.yml
+                                     └─ _site/index.html → GitHub Pages
 ```
 
-配置由管理员在「数据更新」面板完成并导出，普通用户界面不显示配置入口，打开页面时自动读取。单文件版的地址可用 `设置云代理并重建.bat`，或执行 `python build_single.py --proxy=<地址>` 写入 HTML。
+`deploy-pages.yml` 只做一件事：把 `dist/单文件版/彩票统计.html` 复制成 `_site/index.html`，校验文件里含 `EMBEDDED_DATA` 标记后上传并发布。触发条件是 `dist/单文件版/**` 的提交或手动 Run。
 
-地址末尾不带 `?url=`，应用请求时会自行拼接。云函数的部署与验证步骤见 `tools/云代理部署说明.md`。缺 `proxy.json` 时页面照常打开，只是福彩两彩种不能使用在线更新。
+构建期还会把 Secret 地址写成产物里的 `PX_BUILTIN` 常量，仅在「数据来源」弹窗里显示通道状态，不参与取数。
 
-## 九、验证
+---
 
-1. 访问站点地址，确认页面加载、页签可切换、开奖记录有数据。
-2. 打开 **Actions**，确认 `部署到 GitHub Pages` 为绿色；失败时展开日志定位步骤。
-3. 页面覆盖后没有变化，按 `Ctrl+F5` 强刷；`sw.js` 仍缓存旧版时，清除站点数据或用无痕窗口打开一次。
-4. 打开浏览器开发者工具的 Network 面板，确认 `data/*.json`（网址版）或页面自身（单文件版）返回 200。
+## 七、页面里的数据更新
 
-## 十、常见问题
+页面**没有手动更新入口**，菜单里也没有「数据更新」项；不需要访客登录或配置任何地址。
 
-| 现象 | 处理 |
+- 顶部常驻显示**数据更新于**（构建时刻）和最新一期摘要，用来判断数据新旧
+- 数据由云端定时抓取后整体重建，页面不会往设备本机写增量数据
+- Service Worker 会缓存页面，覆盖发布后若看不到变化，按 **Ctrl+F5** 强制刷新，或清一次站点数据 / 用无痕窗口打开
+- 页面是单文件版，数据已内嵌，离线也能查看历史与全部分析功能
+
+---
+
+## 八、验证
+
+| 检查项 | 怎么看 |
 |---|---|
-| 打开显示 404 或只看到 README | 确认 Pages Source 为 GitHub Actions，并已成功运行过一次 `部署到 GitHub Pages` |
-| 页面内容没变化 | `sw.js` 缓存，强刷或清除站点数据 |
-| `deploy-pages.yml` 报找不到文件 | 检查 `dist/单文件版/彩票统计.html` 是否已上传 |
-| 定时任务没有运行 | 检查 Workflow permissions、fork 限制，以及仓库近期是否有提交 |
-| 抓取工作流报 403 / 567 | 官方接口对境外出口 IP 的风控，改用第七节的本地脚本或云代理 |
-| 在线更新里福彩两彩种失败 | 检查 `proxy.json` 是否存在、地址是否可访问、云函数是否已部署 |
+| Secret 已生效 | 定时工作流「检查云代理配置与连通性」打印 `云函数自检 HTTP 200` |
+| 抓取成功 | 定时工作流日志里四彩种都输出期数与最新期号，且 `CHANGED=yes` 或无变化心跳 |
+| 产物已提交 | 仓库 `dist/单文件版/彩票统计.html` 的提交时间更新 |
+| 部署成功 | **部署到 GitHub Pages** 工作流绿灯 |
+| 页面最新 | 强刷后顶部「数据更新于」为刚才的构建时间，最新一期摘要正确 |
 
-## 十一、安全
+---
 
-- 不要把 `管理员账号.txt`、`授权码名单.txt`、`license.json` 放入公开仓库。
-- `tools/cloud_proxy.py` 只含彩票官方域名白名单，不含密钥，可以随仓库留存。
-- `proxy.json` 里是函数 URL，公开可见；云函数内部已做域名白名单限制。
-- 本地诊断脚本与测试文件不参与 Pages 构建，可按需要清理，清理时保留第六节构建链上的文件。
+## 九、常见问题
+
+| 现象 | 原因 | 处理 |
+|---|---|---|
+| 页面 404 | Pages Source 选成了分支部署，仓库根目录没有 `index.html` | Source 改成 **GitHub Actions**，手动 Run 一次部署工作流 |
+| 定时工作流报「未配置仓库 Secret LOTTERY_PROXY」 | Secret 没建或名字不一致 | 按第二节重建，名字必须完全一致 |
+| 云函数自检失败 | 地址失效、授权类型不是「开放」、超时过短 | 浏览器打开根路径看自检 JSON，再按云代理部署说明排查 |
+| 抓取返回 403 / 567 | 云函数出口被上游临时限流，或 Secret 指向了境外平台 | 等下一次定时运行；确认云函数在境内云 |
+| 数据没变化但工作流全绿 | 官方还没出新期；或抓取回落到过期缓存 | 看日志里 `CHANGED=` 与每个彩种的期号输出 |
+| 推送失败 `permission denied` | Workflow permissions 是只读 | 改为 **Read and write permissions** |
+| 页面看不到更新 | Service Worker 缓存 | Ctrl+F5，或清站点数据 |
+| 定时任务长期不跑 | 公开仓库 60 天无 activity 被禁用 | 工作流每天写心跳提交；长时间停跑后手动 Run 一次恢复 |
+
+---
+
+## 十、安全
+
+- 云函数地址只放在仓库 Secret 里，不写死在源码；产物里的内置常量仅作状态显示
+- 云函数「授权类型 = 开放」意味着任何人可匿名调用，真正的防线是 `cloud_proxy.py` 里的域名白名单，不是 URL 保密
+- `管理员账号.txt`、`授权码名单.txt`、`license.json` 属于本地工程文件，**不要提交到公开仓库**；上传包里已排除
+- 定时工作流一天只跑 1~2 次且只抓增量，避免高频请求触发上游限流
+
+---
+
+## 附：本地重建产物
+
+在自己电脑上可以不依赖云端工作流重新生成页面：
+
+```bash
+python build_single.py                      # 用仓库现有数据生成单文件版
+python build_single.py --refresh            # 先抓取再生成（直连，境内网络可用）
+python build_single.py --proxy=你的地址     # 构建期内置云函数地址
+python build_static.py                      # 生成网址版站点
+```
+
+Windows 下可用 `设置云代理并重建.bat`、`刷新数据.bat`、`一键更新并推送.bat`。这些是本地维护工具，页面本身不提供手动更新入口。

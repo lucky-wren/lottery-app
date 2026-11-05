@@ -101,6 +101,22 @@ def build_html():
         log("PWA: manifest.json / sw.js / 图标 已写入")
     except Exception as e:      # noqa
         log("PWA 资源写入失败（不影响主功能）: %s" % e)
+    # 构建期内置：优先 --proxy，其次环境变量 LOTTERY_PROXY（CI Secret）。
+    # 页面不再读取 proxy.json，地址只作为构建期常量写入产物。
+    px = ""
+    for a in sys.argv[1:]:
+        if a.startswith("--proxy="):
+            px = a.split("=", 1)[1].strip()
+    if not px:
+        px = (os.environ.get("LOTTERY_PROXY") or "").strip()
+    if px == "off":
+        px = ""
+    html = html.replace("@@PX_BUILTIN@@", px, 1)
+    if px:
+        log("构建期内置云函数: 已配置")
+    else:
+        log("构建期内置云函数: 未设置（可用 --proxy=URL 或 LOTTERY_PROXY 注入）")
+
     with open(os.path.join(OUT, "index.html"), "w", encoding="utf-8") as f:
         f.write(html)
     assert "var STATIC_BUILD = true;" in html

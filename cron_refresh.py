@@ -103,14 +103,15 @@ def baseline_issue(lot):
 def probe_latest(lot, crawler):
     """快速探测官方接口的最新期号（比全量抓取轻）"""
     try:
+        # 只探测最新期号，一律取最小请求量：云函数转发的是小响应，
+        # 全量历史交给下面的增量合并，避免响应体过大或上游超时。
         if lot == "ssq":
-            d = crawler.fetch_ssq()
+            d = crawler.fetch_ssq(count=5)
         elif lot == "3d":
-            d = crawler.fetch_3d()
+            d = crawler.fetch_3d(count=5)
         elif lot == "pls":
-            d = crawler.fetch_pls(max_pages=3)
+            d = crawler.fetch_pls(max_pages=1)
         else:
-            # 体彩全量要数秒，探测时只取最近 1 页
             d = crawler.fetch_dlt_recent(pages=1)
         return (d["rows"][-1][0] if d.get("rows") else None), d
     except Exception as e:
@@ -165,7 +166,9 @@ def fetch_one(lot, crawler, poll_minutes=0, interval=90):
 
     # 完整抓取（保证历史全量而非只有最近一页）
     try:
-        data, src = crawler.get_data_safe(lot, force=True)
+        # 用增量模式：seed_cache 已把仓库全量数据放进磁盘缓存，
+        # get_data 会只抓最近 60 期 / 1 页再合并，请求量最小。
+        data, src = crawler.get_data_safe(lot, force=False)
     except Exception as e:
         log("%s 完整抓取失败: %s" % (lot, e))
         # IP 级封禁单独标记：这是环境问题，不是代码 bug，
@@ -203,6 +206,27 @@ def fetch_one(lot, crawler, poll_minutes=0, interval=90):
     return body
 
 
+def seed_cache(crawler):
+    """把仓库里已有的全量数据预填到抓取器的磁盘缓存。
+
+    _t 刻意写成 0：让 TTL 判定失效、必须真的去抓一次，
+    但 get_data() 仍会把它当作 old 用于增量合并，不丢历史。
+    """
+    for lot in LOTS:
+        p = os.path.join(STATIC, "data", lot + ".json")
+        if not os.path.exists(p):
+            continue
+        try:
+            with open(p, encoding="utf-8") as f:
+                d = json.load(f)
+            d["_t"] = 0
+            with open(os.path.join(crawler.CACHE_DIR, lot + ".json"),
+                      "w", encoding="utf-8") as f:
+                json.dump(d, f, ensure_ascii=False, separators=(",", ":"))
+        except Exception as e:      # noqa
+            log("  预填缓存 %s 失败（不影响抓取）: %s" % (lot, e))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--poll-minutes", type=int, default=0,
@@ -223,6 +247,9 @@ def main():
     }
 
     import crawler
+    log("云端抓取通道: %s" % ("境内云函数（Secret LOTTERY_PROXY）" if crawler.PROXY_URL
+                              else "直连（未配置 LOTTERY_PROXY）"))
+    seed_cache(crawler)
     ok = 0
     failed = []
     for lot in LOTS:

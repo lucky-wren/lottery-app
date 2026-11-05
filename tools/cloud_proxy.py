@@ -1,16 +1,20 @@
 # -*- coding: utf-8 -*-
-"""境内云函数：福彩接口 CORS 代理（方案2）
+"""境内云函数：彩票官方接口转发（云端定时抓取 + 可选跨域代理）
+
+主要用途
+--------
+GitHub Actions 的定时工作流通过本函数抓取四彩种开奖数据：
+所有官方请求被改写为 <本函数地址>?url=<URL编码后的官方地址>，
+由本函数在境内出口代为请求，再把原文返回给抓取脚本。
 
 为什么需要它
 ------------
-实测（2026-11-03）：
-  · 体彩 webapi.sporttery.cn  → 响应头含 access-control-allow-origin: *
-    浏览器可直连，不需要代理。
-  · 福彩 www.cwl.gov.cn       → 无任何 CORS 头，且不支持 JSONP
-    浏览器直接请求会被同源策略拦截，必须经一层代理。
+彩票站按 IP 段风控，GitHub Actions / Render / Vercel 等境外出口
+一律 403 / 567；境内云函数的出口 IP 不在这些被封的段里。
 
-代理必须部署在**境内**，因为彩票站按 IP 段风控，
-GitHub Actions / Render / Vercel 等境外出口一律 403 / 567。
+另外，福彩 www.cwl.gov.cn 不返回任何 CORS 头、也不支持 JSONP，
+因此若浏览器端需要直连福彩接口，也可经本函数转发（体彩接口
+自带 access-control-allow-origin: *，可不走代理）。
 
 支持的平台
 ----------
@@ -88,7 +92,9 @@ def _get(url, referer):
         "Accept-Language": "zh-CN,zh;q=0.9",
         "Referer": referer,
     })
-    return urllib.request.urlopen(req, timeout=20).read().decode("utf-8", "ignore")
+    # 抓取工作流用的是增量请求（几十期），30 秒足够；
+    # 控制台执行超时建议设为 60 秒，留出函数冷启动余量。
+    return urllib.request.urlopen(req, timeout=30).read().decode("utf-8", "ignore")
 
 
 def _q(event, key):

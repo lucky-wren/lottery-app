@@ -10,6 +10,11 @@
 用法:
     python3 build_single.py             # 用已有数据生成（快）
     python3 build_single.py --refresh   # 先重新抓取再生成
+    python3 build_single.py --proxy=URL # 构建期把云函数地址写入产物
+
+云端自动更新：仓库 Secret LOTTERY_PROXY 在 CI 里注入同名环境变量，
+抓取脚本用它转发官方请求，本脚本把它作为构建期常量写入产物。
+页面本身不发起取数请求，也不需要运行期配置。
 """
 import os
 import sys
@@ -83,20 +88,21 @@ def build():
     html = open(os.path.join(BASE, "static", "index.html"),
                 encoding="utf-8").read()
 
-    # 云代理内置：--proxy=URL（off 表示清除）。
-    # 单文件版双击打开时读不到 proxy.json，只能靠构建期写入内置常量，
-    # 这样管理员生成一次 html，所有拿到这个文件的人都能更新双色球/福彩3D。
+    # 构建期内置：优先命令行 --proxy，其次环境变量 LOTTERY_PROXY（CI Secret）。
+    # 地址只作为常量写进产物，页面不用它取数；不配置也能正常构建与阅读。
     px = ""
     for a in sys.argv[1:]:
         if a.startswith("--proxy="):
             px = a.split("=", 1)[1].strip()
+    if not px:
+        px = (os.environ.get("LOTTERY_PROXY") or "").strip()
     if px == "off":
         px = ""
     html = html.replace("@@PX_BUILTIN@@", px, 1)
     if px:
-        log("内置云代理: %s" % px)
+        log("构建期内置云函数: 已配置")
     else:
-        log("内置云代理: 未设置（可用 --proxy=URL 写入）")
+        log("构建期内置云函数: 未设置（可用 --proxy=URL 或 LOTTERY_PROXY 注入）")
 
     payload = {}
     for lot in LOTS:
