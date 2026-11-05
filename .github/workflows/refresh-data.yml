@@ -1,47 +1,17 @@
 name: 定时刷新彩票数据
 
-# ─────────────────────────────────────────────────────────────
-# 为什么这么排：
+# 每天按开奖日抓一次 + 次日兜底一次，抓完重新生成单文件版并推送，
+# dist/单文件版/** 的提交会自动触发 deploy-pages.yml 发布到 Pages。
 #
-# 1) 分钟数刻意避开整点和 0/15/30/45。
-#    GitHub 官方说明：高负载期（尤其整点）schedule 会延迟 5~30 分钟，
-#    负载过高时 job 甚至被直接丢弃。用 17/37/43 这类分钟可显著降低延迟。
+# 官方接口统一经境内云函数转发，避免 GitHub runner 的境外出口 IP
+# 被彩票站按段风控（403 / 567）。云函数地址放在仓库 Secret LOTTERY_PROXY。
 #
-# 2) 按开奖日精确排期（已用历史数据反推验证）：
-#      双色球 → 周二、周四、周日（21:15 开奖）
-#      大乐透 → 周一、周三、周六（20:30 开奖）
-#      福彩3D → 每天（21:15 开奖）
-#      排列三 → 每天（21:25 开奖）
-#    cron 星期字段：0=周日, 1=周一, ... 6=周六
-#
-# 3) 更关键：job 内部还会轮询等官方出数据（--poll-minutes）。
-#    因为官方接口也不是开奖瞬间就有，通常晚几分钟。
-#    所以 cron 早到/晚到都无所谓，到了就一直等到出新期号为止。
-#
-# 4) 已知限制：GitHub runner 位于境外（本次实测出口 IP 52.165.101.20，
-#    属 Azure 段），福彩/体彩接口对境外 IP 会返回 403/567。
-#    IP 池随机分配，撞上黑名单就失败——所以本 job 仅供参考，
-#    可靠的数据更新请用本地「刷新数据.bat」。
-#
-# cron 用 UTC（北京 = UTC+8）：
-#    北京 21:37 → UTC 13:37
-#    北京 20:47 → UTC 12:47
-#    北京 09:13 → UTC 01:13
-# ─────────────────────────────────────────────────────────────
+# cron 用 UTC（北京 = UTC+8）：北京 21:43 → UTC 13:43，次日 09:13 → UTC 01:13。
+# 分钟数避开整点，减少 GitHub 高负载期的排队延迟。
 
 on:
   schedule:
-    # ───── 排期原则：越少越好 ─────
-    # 教训：曾经一天排 6 次（21:17/21:37/21:43/21:53/22:43/09:13），
-    # 一周 40 多次。福彩/体彩的 WAF 对高频境外请求会直接拉黑出口 IP，
-    # 而 _retry 又会在被拒时重试 8 次——等于被拉黑后变本加厉地打，
-    # 结果从「偶尔撞上黑名单」变成「经常撞上」。
-    # 现在砍到每天 1 次主跑 + 1 次兜底，一周 14 次以内。
-    #
-    # 北京 21:43 → UTC 13:43：晚于 3D(21:15) 与排列三(21:25) 开奖，
-    # 配合 --poll-minutes 等官方出数据，当天即可抓齐全部四彩种。
     - cron: '43 13 * * *'
-    # 次日兜底：北京 09:13（UTC 01:13），只用于补前一天的漏网之鱼
     - cron: '13 1 * * *'
 
   workflow_dispatch:
@@ -67,7 +37,9 @@ concurrency:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 25      # 轮询最多 14 分钟，留足余量
+    timeout-minutes: 25
+    env:
+      LOTTERY_PROXY: ${{ secrets.LOTTERY_PROXY }}
     steps:
       - name: 拉取代码
         uses: actions/checkout@v4
@@ -83,35 +55,39 @@ jobs:
           pip install -r requirements.txt
           pip install requests
 
+      - name: 检查云代理配置与连通性
+        run: |
+          if [ -z "$LOTTERY_PROXY" ]; then
+            echo "::error::未配置仓库 Secret LOTTERY_PROXY（境内云函数地址）"
+            echo "Settings → Secrets and variables → Actions → New repository secret"
+            exit 1
+          fi
+          python3 - <<'PY'
+          import os, urllib.request
+          p = os.environ['LOTTERY_PROXY'].strip()
+          sep = '&' if '?' in p else '?'
+          u = p + sep + 'lot=ssq&n=1'
+          try:
+              r = urllib.request.urlopen(u, timeout=40)
+              body = r.read(160).decode('utf-8', 'ignore')
+              print('云函数自检 HTTP', r.status, '响应片段:', body)
+          except Exception as e:
+              print('::error::云函数不可达:', e)
+              raise SystemExit(1)
+          PY
+
       - name: 打印触发来源与时间
         run: |
           echo "触发 schedule: ${{ github.event.schedule || '(手动/推送)' }}"
           echo "UTC  现在: $(date -u '+%F %H:%M')"
           echo "北京 现在: $(TZ='Asia/Shanghai' date '+%F %H:%M')"
 
-      # ───────── 连通性自检（诊断用） ─────────
-      # GitHub 的 runner 在境外，国内彩票接口（cwl.gov.cn / sporttery.cn）
-      # 对境外 IP 可能直接拒绝或超时。这一步把结果打进日志，
-      # 一眼就能区分「接口没数据」还是「runner 根本连不上」。
-      - name: 检查官方接口连通性（诊断）
-        run: |
-          echo "出口 IP: $(curl -s -m 10 https://api.ipify.org || echo 获取失败)"
-          for u in \
-            "https://www.cwl.gov.cn/cwl_admin/front/cwlkj/search/kjxx/findDrawNotice?name=ssq&issueCount=1" \
-            "https://webapi.sporttery.cn/gateway/lottery/getHistoryPageListV1.qry?gameNo=85&pageNo=1&pageSize=1" ; do
-            r=$(curl -s -o /dev/null -w "%{http_code} %{time_total}s" -m 25 \
-                -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
-                -H "Referer: https://www.cwl.gov.cn/" "$u" 2>/dev/null || echo "连接失败")
-            echo "  [$r]  $u"
-          done
-
       - name: 抓取并生成产物（开奖日轮询等数据）
         id: gen
         run: |
           POLL="${{ github.event.inputs.poll_minutes }}"
           [ -z "$POLL" ] && POLL=12
-          # 注意：不要用 continue-on-error。抓取失败必须让 job 变红，
-          # 否则「全绿但数据从不更新」这类问题会被彻底掩盖。
+          # 抓取失败必须让 job 变红，避免「全绿但数据从不更新」。
           set -o pipefail
           python3 cron_refresh.py --poll-minutes "$POLL" 2>&1 | tee cron.log
           rc=${PIPESTATUS[0]}
@@ -119,10 +95,7 @@ jobs:
           echo "rc=$rc" >> $GITHUB_OUTPUT
           echo "changed=$(grep -c 'CHANGED=yes' cron.log || true)" >> $GITHUB_OUTPUT
           echo "failed=$(grep -o 'FAILED=.*' cron.log | tail -1 | cut -d= -f2-)" >> $GITHUB_OUTPUT
-          # 这里故意不 exit：
-          # 部分彩种失败时（如 3d/pls 挂了但 ssq/dlt 正常），
-          # 仍要让下面的「提交」步骤把已成功的数据存下来，
-          # 失败判定统一放到最后一个步骤，避免白白丢掉成功的一半。
+          # 部分彩种失败时仍要提交已成功的数据，失败判定放到最后一步。
 
       - name: 显示结果
         run: cat cron.log || true
@@ -136,12 +109,8 @@ jobs:
           git diff --staged --quiet || git commit -m "chore(data): 自动刷新开奖数据 $(TZ='Asia/Shanghai' date '+%F %H:%M')"
           git push
 
-      # ───────── 心跳提交 ─────────
-      # 用途：GitHub 会在「公开仓库 60 天无任何 activity」时
-      #       自动禁用定时任务（静默失效，不通知）。
-      #       每天留一个 commit，就能保证定时任务永不过期。
-      #       文件放在 dist/ 下，被上面的 paths-ignore 排除，
-      #       因此不会触发本工作流循环执行。
+      # 公开仓库 60 天无 activity 会被静默禁用定时任务，
+      # 每天留一个 commit 保活；dist/** 已被 paths-ignore 排除，不会循环触发。
       - name: 心跳提交（保持定时任务不被禁用）
         if: steps.gen.outputs.changed == '0'
         run: |
@@ -153,32 +122,14 @@ jobs:
           git diff --staged --quiet || git commit -m "chore: heartbeat $(TZ='Asia/Shanghai' date '+%F %H:%M')"
           git push
 
-      # ───────── 统一失败判定（必须放在提交之后） ─────────
-      # 任何彩种抓取失败都让 job 变红，杜绝「全绿但数据从不更新」。
-      # 已成功抓取的部分在上面的「提交」步骤里已经存好了，不会丢。
       - name: 判定本次是否失败（任一彩种失败即失败）
         if: steps.gen.outputs.rc != '0'
         run: |
           echo "::error::本次抓取有彩种失败：${{ steps.gen.outputs.failed }}"
           echo ""
           echo "排查方向："
-          echo "  1) 先看本 job「检查官方接口连通性（诊断）」那一步的 HTTP 状态码"
-          echo "     - 200        → 网络正常，多为官方无新数据或返回结构异常"
-          echo "     - 000/连接失败 → GitHub runner 在境外，被官方接口拒绝。"
-          echo "       此时自动更新不可用，只能本地跑「刷新数据.bat」再上传成品"
-          echo "  2) 再看「显示结果」那一步的 [cron] 日志，确认具体报错彩种"
+          echo "  1) 看「检查云代理配置与连通性」那一步的 HTTP 状态与响应片段"
+          echo "     - 200 → 云函数正常，多为官方接口临时不可用或返回结构异常"
+          echo "     - 失败 → 云函数地址、函数 URL 权限或云平台侧问题"
+          echo "  2) 看「显示结果」那一步的 [cron] 日志，确认具体报错彩种"
           exit 1
-
-      # ───────── 可选：直接上传到腾讯云 CloudBase 静态托管 ─────────
-      # 在仓库 Settings → Secrets 加两个变量后取消注释：
-      #   TCB_ENV_ID   环境 ID（形如 xxx-1a2b3c4d）
-      #   TCB_SECRET   腾讯云密钥对，格式 SecretId#SecretKey
-      # - name: 上传到 CloudBase
-      #   if: steps.gen.outputs.changed != '0'
-      #   env:
-      #     TCB_ENV_ID: ${{ secrets.TCB_ENV_ID }}
-      #     TCB_SECRET: ${{ secrets.TCB_SECRET }}
-      #   run: |
-      #     npm i -g @cloudbase/cli
-      #     tcb login --apiKeyId "${TCB_SECRET%%#*}" --apiKey "${TCB_SECRET##*#}"
-      #     tcb hosting deploy dist/单文件版/彩票统计.html 彩票统计.html -e "$TCB_ENV_ID"
