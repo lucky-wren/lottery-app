@@ -628,6 +628,28 @@ function admFmt(t){ var q=function(n){return ('0'+n).slice(-2)};
 /* ---------- 管理员 ---------- */
 function admCfg(){ return (LICENSE&&LICENSE.admin)||null; }
 function admIn(){ try{ return sessionStorage.getItem('lc_admin')==='1'; }catch(e){ return false; } }
+/* ---------- 管理员密码（本机修改） ----------
+   页面是纯静态的，密码散列构建时烤进 LICENSE.admin.hash，页面内无法改写它。
+   所以「修改密码」分两层：
+     1) 本机立即生效：把新散列存 localStorage，登录时优先用；
+     2) 所有访客生效：导出新 license.json → 重新构建 → 推送（见 admPwdDone）。
+   本机记录带 base = 当时的内嵌散列。一旦产物重建换了内嵌密码，
+   base 对不上就自动丢弃本机记录，避免新旧两套密码互相打架。 */
+var ADM_PWD_KEY='lc_adminpwd';
+function admPwdGet(){
+  try{
+    var j=JSON.parse(localStorage.getItem(ADM_PWD_KEY)||'null');
+    return (j && /^[0-9a-f]{24}$/.test(j.hash||'')) ? j : null;
+  }catch(e){ return null; }
+}
+function admPwdSet(o){ try{ localStorage.setItem(ADM_PWD_KEY, JSON.stringify(o)); }catch(e){} }
+function admPwdClear(){ try{ localStorage.removeItem(ADM_PWD_KEY); }catch(e){} }
+function admNow(){
+  var a=admCfg(); if(!a) return null;
+  var o=admPwdGet();
+  if(o && o.base===a.hash) return {user:a.user, hash:o.hash, local:true, at:o.at||''};
+  return {user:a.user, hash:a.hash, local:false, at:''};
+}
 function admInitMenu(){
   var on=admIn(), has=!!admCfg();
   var row=$('side-adm'); if(row) row.style.display = has?'':'none';
@@ -647,14 +669,17 @@ function admAutoLic(){
 function admOpen(){ if(!admCfg()){ toast('本页未配置管理员账号'); return; }
   if(admIn()) admShowPanel(); else admShowLogin(); }
 function admShowPanel(){
-  var a=admCfg()||{};
+  var a=admNow()||{user:'admin'};
   var h='<div class="mh">管理员<span onclick="closeHelp()">×</span></div><div class="mb">';
-  h+='<p style="font-size:13.5px;margin:0 0 14px">已登录：<b style="color:var(--brand)">'+esc(a.user||'admin')+'</b></p>';
+  h+='<p style="font-size:13.5px;margin:0 0 14px">已登录：<b style="color:var(--brand)">'+esc(a.user)+'</b></p>';
   h+='<div class="btns" style="margin-bottom:14px">'
+    +'<button class="p" onclick="admShowPwd()">修改密码</button>'
     +'<button class="g" onclick="admShowLogin()">重新登录</button>'
     +(regUrl()?'<button class="g" onclick="admReg()">授权登记</button>':'')+'</div>';
-  h+='<div class="note" style="padding:10px 0 0">登录状态只在当前标签页有效，'
-    +'关掉页面即退出。<br>要签发授权码，请从菜单里点<b>「生成授权码」</b>。</div>';
+  h+='<div class="note" style="padding:10px 0 0">'
+    +(a.local?'本机已单独设置密码（'+esc(a.at)+'），仅这一台设备生效。'
+             :'当前使用页面内置的密码。')
+    +'<br>登录状态只在当前标签页有效，关掉页面即退出。<br>要签发授权码，请从菜单里点<b>「生成授权码」</b>。</div>';
   h+='<div class="btns" style="margin-top:12px"><button class="delbtn" onclick="admLogout()">退出管理员</button></div>';
   h+='</div>';
   modalBox(h);
@@ -713,7 +738,7 @@ function admShowLogin(){
 function admLogin(){
   var u=(($('adm-u')&&$('adm-u').value)||'').trim();
   var p=(($('adm-p')&&$('adm-p').value)||'');
-  var box=$('adm-msg'), a=admCfg();
+  var box=$('adm-msg'), a=admNow();
   function say(t,c){ if(box) box.innerHTML='<div class="'+(c||'e')+'">'+esc(t)+'</div>'; }
   if(!a){ say('本页未配置管理员账号'); return; }
   if(!u||!p){ say('请输入用户名和密码'); return; }
@@ -743,6 +768,127 @@ function admLogout(){
     render();
   }
   toast('已退出管理员');
+}
+/* ---------- 修改管理员密码 ----------
+   纯静态页面改不了内嵌的 LICENSE.admin.hash，所以分两层：
+   本机立即生效（localStorage 覆盖）+ 导出配置重建产物（所有访客生效）。 */
+function admPwdInput(id,ph,extra){
+  return '<div style="margin-bottom:8px"><input id="'+id+'" type="password" placeholder="'+ph+'" '
+    +'autocomplete="new-password" spellcheck="false" '
+    +'style="width:100%;padding:10px 12px;font-size:14px;border:1px solid var(--bd2);border-radius:8px;'
+    +'background:var(--surface);color:var(--fg)"'+(extra||'')+'></div>';
+}
+function admShowPwd(){
+  if(!admIn()){ admShowLogin(); return; }
+  var a=admNow();
+  if(!a){ toast('本页未配置管理员账号'); return; }
+  var h='<div class="mh">修改管理员密码<span onclick="closeHelp()">×</span></div><div class="mb">';
+  h+='<div class="note" style="padding:0 0 10px">用户名固定为 <b>'+esc(a.user)+'</b>（不可修改）。'
+    +'改密后<b>本机立即生效</b>，当前登录状态保持不变。</div>';
+  h+=admPwdInput('ap-old','原密码');
+  h+=admPwdInput('ap-new','新密码（至少 6 位）');
+  h+=admPwdInput('ap-new2','再输一次新密码',' onkeydown="if(event.key===\'Enter\')admChangePwd()"');
+  h+='<div id="ap-msg" class="msg"></div>';
+  h+='<div class="btns" style="margin-top:10px"><button class="p" onclick="admChangePwd()">保存修改</button>'
+    +'<button class="g" onclick="admShowPanel()">返回</button></div>';
+  if(a.local){
+    h+='<div class="btns" style="margin-top:10px"><button class="delbtn" onclick="admPwdReset()">恢复页面内置密码</button></div>';
+  }
+  h+='<div class="sec" style="margin-top:14px">关于全局生效</div>'
+    +'<div class="note" style="padding:0">密码散列是构建时烤进页面的，页面本身无法改写。'
+    +'要让 GitHub Pages 上<b>所有访客</b>都用新密码，保存后在成功页下载 <b>license.json</b>，'
+    +'覆盖本地同名文件，重新构建并推送仓库。<br>'
+    +'重新构建换了内置密码后，本机这条改密记录会自动作废，以新的内置密码为准。</div>';
+  h+='</div>';
+  modalBox(h);
+}
+function admChangePwd(){
+  var a=admNow(), box=$('ap-msg');
+  function say(t,c){ if(box) box.innerHTML='<div class="'+(c||'e')+'">'+esc(t)+'</div>'; }
+  if(!a){ say('本页未配置管理员账号'); return; }
+  var o=(($('ap-old')&&$('ap-old').value)||'');
+  var n=(($('ap-new')&&$('ap-new').value)||'');
+  var n2=(($('ap-new2')&&$('ap-new2').value)||'');
+  if(!o||!n||!n2){ say('请把三项都填完'); return; }
+  if(licH('LCADMIN|'+a.user+'|'+o)!==a.hash){ say('原密码不对'); return; }
+  if(n.length<6){ say('新密码至少 6 位'); return; }
+  if(n!==n2){ say('两次输入的新密码不一致'); return; }
+  if(n===o){ say('新密码不能和原密码相同'); return; }
+  var base=admCfg().hash, at=licToday();
+  var nh=licH('LCADMIN|'+a.user+'|'+n);
+  admPwdSet({user:a.user, hash:nh, base:base, at:at});
+  S.admPwd={user:a.user, pwd:n, hash:nh, at:at};
+  admPwdDone();
+}
+function admPwdReset(){
+  if(!admNow().local){ toast('本机没有单独设置的密码'); return; }
+  admPwdClear();
+  S.admPwd=null;
+  toast('已恢复为页面内置密码，见 管理员账号.txt');
+  admShowPwd();
+}
+/* 成功页：明文只留在本次页面的内存里，刷新即消失，所以提醒立刻保存 */
+function admPwdDone(){
+  var p=S.admPwd; if(!p) return;
+  var h='<div class="mh">密码已修改<span onclick="closeHelp()">×</span></div><div class="mb">';
+  h+='<div class="msg"><div class="ok">本机已生效，下次登录请用新密码。</div></div>';
+  h+='<div class="sec">新账号（只显示这一次）</div>';
+  h+='<div style="background:var(--surface);border:1px solid var(--bd2);border-radius:8px;padding:12px;margin-bottom:10px">'
+    +'<div style="font-size:13px">用户名：<b>'+esc(p.user)+'</b></div>'
+    +'<div style="font-size:13px">密　码：<b style="color:var(--brand);letter-spacing:1px">'+esc(p.pwd)+'</b></div>'
+    +'<div style="font-size:11.5px;color:var(--fg7);margin-top:4px">修改于 '+esc(p.at)+'</div></div>';
+  h+='<div class="note" style="padding:0 0 10px">明文只在当前页面内存里，<b>刷新或关掉就不再显示</b>。'
+    +'请立刻记下来或下载备忘；页面里只保存密码散列，不保存明文。</div>';
+  h+='<div class="sec">让所有访客也生效</div>'
+    +'<div class="note" style="padding:0 0 8px">下载 <b>license.json</b> 覆盖本地同名文件，'
+    +'再运行 <b>build_single.py</b> / <b>build_static.py</b> 并推送仓库。'
+    +'只改本机不推送的话，Pages 上的其他访客仍用旧密码。</div>';
+  h+='<div class="btns" style="margin-bottom:8px">'
+    +'<button class="p" onclick="admPwdDownloadCfg()">下载 license.json</button>'
+    +'<button class="g" onclick="admPwdCopyCfg()">复制完整配置</button>'
+    +'<button class="g" onclick="admPwdDownloadMemo()">下载账号备忘</button></div>';
+  h+='<div class="btns" style="margin-top:6px"><button class="g" onclick="admShowPanel()">完成，返回管理员</button></div>';
+  h+='</div>';
+  modalBox(h);
+}
+function admPwdCfgText(){
+  var p=S.admPwd; if(!p) return '';
+  var c={};
+  if(LICENSE){
+    if(LICENSE.salt) c.salt=LICENSE.salt;
+    if(LICENSE.expire) c.expire=LICENSE.expire;
+    if(LICENSE.codes) c.codes=LICENSE.codes.slice();
+    if(LICENSE.sigSalt) c.sigSalt=LICENSE.sigSalt;
+    if(LICENSE.regUrl) c.regUrl=LICENSE.regUrl;
+  }
+  c.admin={user:p.user, hash:p.hash};
+  return JSON.stringify(c,null,2)+'\n';
+}
+function admPwdDownload(name,txt,type){
+  if(!txt){ toast('请先完成修改密码'); return; }
+  try{
+    var b=new Blob([txt],{type:type||'text/plain;charset=utf-8'});
+    var a=document.createElement('a'); a.href=URL.createObjectURL(b);
+    a.download=name; a.click();
+    setTimeout(function(){ try{ URL.revokeObjectURL(a.href); }catch(e){} },1000);
+  }catch(e){ toast('下载失败，请改用「复制完整配置」'); }
+}
+function admPwdDownloadCfg(){ admPwdDownload('license.json', admPwdCfgText(), 'application/json;charset=utf-8'); }
+function admPwdCopyCfg(){
+  var t=admPwdCfgText();
+  if(!t){ toast('请先完成修改密码'); return; }
+  copyText(t); toast('已复制完整配置，可直接覆盖 license.json');
+}
+function admPwdDownloadMemo(){
+  var p=S.admPwd; if(!p) return;
+  var t='彩票统计页面 · 管理员账号（页面内修改）\n'
+    +'----------------------------------------\n'
+    +'用户名：'+p.user+'\n密　码：'+p.pwd+'\n修改时间：'+p.at+'\n'
+    +'----------------------------------------\n'
+    +'本机已立即生效。要让 Pages 上所有访客生效：\n'
+    +'用下载的 license.json 覆盖本地同名文件，重新运行 build_single.py / build_static.py 并推送。\n'
+    +'此文件含明文密码，请单独保存，不要上传到公开仓库。\n';
+  admPwdDownload('管理员账号.txt', t);
 }
 function admSetUnit(){ var s=$('adm-unit'); if(s) S.admUnit=s.value; admRenderGen(); }
 function admSetVal(){ var i=$('adm-val'); if(i){ var v=parseInt(i.value,10); S.admVal=isNaN(v)?1:Math.max(1,Math.min(999,v)); } admRenderGen(); }
@@ -982,6 +1128,7 @@ function renderLock(){
   return h;
 }
 var S = {noApi:STATIC_BUILD, lot:'ssq', tab:'list',
+  admPwd:null,                         /* 改密成功页的明文，只留内存，刷新即消失 */
   listSort:{k:0,dir:-1}, listLimit:60,
   /* 列表一次最多渲染多少期：再点下去 DOM 节点会撑爆手机，
      更早的期号请用上方搜索框定位 */
@@ -4063,6 +4210,7 @@ function licShowInfo(){
     body+='<h4>管理员</h4><div class="btns">'
       +(admIn()
         ? '<button class="p" onclick="admShowGen()">生成授权码</button>'
+          +'<button onclick="admShowPwd()">修改密码</button>'
           +'<button class="delbtn" onclick="admLogout()">退出登录</button>'
         : '<button onclick="admShowLogin()">管理员登录</button>')
       +'</div>';
@@ -4319,6 +4467,23 @@ var HELP_SECTIONS=[
    +'<b>只认那一台设备</b>，换设备激活不了，全程不需要联网。</li><li>留空则生成 12 位<b>通用码</b>，任意设备都能用（适合自己多台设备）。</li>'
    +'<li>新签的码<b>不用重新构建或上传页面</b>，直接发给对方就能激活；每个码自带到期日。</li></ul><p style="font-size:12px;co'
    +'lor:#888">说明：签发和验证都在页面内完成，密钥也在 HTML 里。它拦得住随手转发，拦不住刻意破解；要真正不可伪造必须配后端。</p>'
+  },
+ {t:'修改管理员密码', b:
+   '<ul><li>入口：管理员登录后，点菜单<b>「管理员」</b> → <b>「修改密码」</b>；「访问授权」面板里登录后也有同一入口。</li>'
+   +'<li>要填<b>原密码</b>、<b>新密码</b>和<b>确认新密码</b>。新密码至少 6 位、两次必须一致、不能和原密码相同；'
+   +'用户名是构建时固定的，<b>不能在这里改</b>。</li>'
+   +'<li><b>本机立即生效</b>：新密码只对当前这台设备、这个浏览器有效，当前登录状态保持不变；'
+   +'页面只保存密码散列，不保存明文。清除浏览器数据后这条记录会消失，回到页面内置密码。</li>'
+   +'<li><b>所有访客生效</b>：密码散列是构建时烤进 HTML 的，页面本身改不了它。改密成功页可下载 '
+   +'<b>license.json</b>（或复制完整配置）覆盖本地同名文件，也可以在本地执行 '
+   +'<b>python3 make_license.py --admin-pass 新密码</b>，然后重新运行 build_single.py / '
+   +'build_static.py 并推送仓库。不重建推送，Pages 上其他访客仍用旧密码。</li>'
+   +'<li>改密成功页会显示一次新密码明文，<b>刷新或关掉页面就不再显示</b>，可下载<b>账号备忘</b>留底；'
+   +'请把它和 <b>管理员账号.txt</b> 一样单独保存，别上传公开仓库。</li>'
+   +'<li>重新构建换了内置密码后，本机之前的改密记录会<b>自动作废</b>，以新的内置密码为准，不会两套密码打架。'
+   +'想放弃本机改密，可在修改密码面板点<b>「恢复页面内置密码」</b>。</li></ul>'
+   +'<p style="font-size:12px;color:#888">说明：这是纯前端校验，验证用的散列和算法都在 HTML 里，'
+   +'挡得住随手试密码，挡不住刻意扒源码；要真正不可绕过必须配后端鉴权。</p>'
   },
  {t:'深色模式与宽屏', b:
    '<ul><li>只有<b>浅色</b>和<b>深色</b>两种，默认<b>跟随时间自动切换</b>：每天 19:00 到次日 07:00 为深色，其余时间浅色，跨过时间'

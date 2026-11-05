@@ -196,6 +196,45 @@ refresh-data.yml
 
 ---
 
+## 十一、修改管理员密码
+
+页面里管理员登录后，可以在「管理员 → 修改密码」修改密码。**这个改动只对本机立即生效**：页面是纯静态的，密码散列是构建时写进 HTML 的，浏览器改不了它。
+
+要让 Pages 上所有访客都用新密码，二选一：
+
+**方式 A · 用页面导出的配置**
+
+1. 改密成功页点「下载 license.json」（或「复制完整配置」）
+2. 用下载的文件覆盖本地工程里的同名文件。它包含页面内嵌的全部授权字段（`salt` / `expire` / `codes` / `sigSalt` / `admin` / `regUrl`）；如果本地 `license.json` 另有自定义字段，请改用方式 B，避免覆盖时丢失
+3. 重新构建并推送：
+
+```bash
+python build_single.py
+python build_static.py
+git add dist/ static/
+git commit -m "更新管理员密码"
+git push
+```
+
+**方式 B · 用本地脚本**
+
+```bash
+python make_license.py --admin-pass 你的新密码
+python build_single.py
+python build_static.py
+git add dist/ static/
+git commit -m "更新管理员密码"
+git push
+```
+
+`make_license.py` 会同步更新 `管理员账号.txt`，原有授权码、`salt`、`sigSalt`、登记表地址都保留，不会重新签码。
+
+推送 `dist/单文件版/**` 会触发 `deploy-pages.yml` 自动部署。部署完成后，本机之前的改密记录因为内嵌散列已变化会自动作废，统一以新的内置密码为准。
+
+改密成功页里的新密码明文只显示一次，刷新即消失，可用「下载账号备忘」留底。`管理员账号.txt`、`授权码名单.txt`、含明文密码的备忘文件都不要提交到公开仓库。
+
+---
+
 ## 附：本地重建产物
 
 在自己电脑上可以不依赖云端工作流重新生成页面：
