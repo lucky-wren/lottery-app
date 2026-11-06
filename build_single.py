@@ -110,7 +110,7 @@ def build():
             open(os.path.join(DATA, lot + ".json"), encoding="utf-8"))
 
     # 补写 updatedAt / buildDate。
-    # 这两个字段只有后端 main.py 会写，静态构建不会，
+    # 这两个字段只有早期后端版本会写，静态构建不会，
     # 缺了会让页面显示「数据更新于 Invalid Date」
     # （undefined*1000 = NaN → new Date(NaN)）。
     now = int(time.time())
@@ -256,29 +256,7 @@ def build():
     assert old in html, "未找到 load() 内的静态读取分支"
     html = html.replace(old, new, 1)
 
-    old_tip = ('\'正在获取\'+n+\'最新开奖数据…<br><span style="font-size:12px;color:#aaa">'
-               '首次加载需从官方接口抓取，请稍候</span>')
-    new_tip = ('\'正在加载\'+n+\'开奖数据…<br><span style="font-size:12px;color:#aaa">'
-               '\'+(typeof EMBEDDED_BUILD!==\'undefined\'&&EMBEDDED_BUILD'
-               '?\'请稍候\':\'首次加载需从官方接口抓取，请稍候\')+\'</span>')
-    if old_tip in html:
-        html = html.replace(old_tip, new_tip, 1)
-        log("  加载提示文案已改为自适应")
-    else:
-        log("  [警告] 未匹配到加载提示文案，保留原文")
-
-    # loading 文案：内嵌版不再提示"从官方接口抓取"
-    html = html.replace(
-        "正在获取'+n+'最新开奖数据…<br><span style=\"font-size:12px;color:#aaa\">"
-        "首次加载需从官方接口抓取，请稍候</span>",
-        "正在加载'+n+'开奖数据…<br><span style=\"font-size:12px;color:#aaa\">"
-        "请稍候</span>", 1)
-
-    # 「数据更新于」时间格式：源码已内置 fmtDt 统一格式，这里只在旧版源码上补。
-    if "function fmtDt(" in html:
-        log("  时间格式：源码已统一为 YYYY-MM-DD，跳过注入")
-    else:
-        log("  [警告] 源码未含 fmtDt，时间格式可能仍不一致")
+    # 源码的加载提示已是中性文案，无需在构建期改写。
 
     # 兜底：若 3 秒后仍停在 loading，直接用内嵌数据强制渲染
     html = html.replace(

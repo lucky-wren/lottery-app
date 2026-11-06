@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#e8402a">
 <!--PWA:APPLE_ICON-->
 <!--PWA:MANIFEST-->
-<title>彩票统计（离线单文件版）· 双色球 / 大乐透</title>
+<title>彩票统计 · 双色球 / 大乐透 / 福彩3D / 排列三</title>
 <style>
 /* ---------- 主题变量 ---------- */
 :root{
@@ -172,6 +172,27 @@ svg{display:block}
 .nb.sel{background:var(--brand);color:#fff;border-color:var(--brand);font-weight:600}
 .nb.sel.b{background:#2b6cd4;border-color:#2b6cd4}
 .nb.sm{width:28px;height:28px;line-height:28px;font-size:12px;cursor:default;flex-shrink:0}
+.nb.sm.b.pin{box-shadow:0 0 0 2px rgba(43,108,212,.35);background:#eaf1ff;color:#184a9e;font-weight:700}
+.nb.sm.rbhit{box-shadow:0 0 0 2px rgba(43,108,212,.30);border-color:#5a92e0;color:#184a9e;font-weight:700}
+/* 冷 / 温 / 热三档：号码 + 遗漏胶囊 + 出现次数 */
+.zgrp{margin:8px 12px 0;padding:8px 10px;border-radius:10px;border-left:4px solid}
+.zgrp.cold{background:linear-gradient(90deg,rgba(59,111,212,.13),rgba(59,111,212,.02));border-left-color:#3b6fd4}
+.zgrp.warm{background:linear-gradient(90deg,rgba(216,138,31,.13),rgba(216,138,31,.02));border-left-color:#d88a1f}
+.zgrp.hot{background:linear-gradient(90deg,rgba(214,58,42,.13),rgba(214,58,42,.02));border-left-color:#d63a2a}
+.zgrp .zt{font-size:12px;font-weight:700;margin-bottom:6px}
+.zgrp.cold .zt{color:#3b6fd4}
+.zgrp.warm .zt{color:#b8751a}
+.zgrp.hot .zt{color:#d63a2a}
+.zrow{display:flex;flex-wrap:wrap;gap:6px}
+.zball{width:54px;box-sizing:border-box;padding:5px 2px 4px;border-radius:10px;background:var(--surface);
+ border:1px solid var(--bd2);display:flex;flex-direction:column;align-items:center;gap:2px}
+.znum{font-size:21px;font-weight:800;line-height:1.05;color:var(--fg3);font-variant-numeric:tabular-nums}
+.zbadge{font-size:10.5px;font-weight:700;color:#fff;border-radius:8px;padding:1px 5px;
+ white-space:nowrap;line-height:1.4}
+.zgrp.cold .zbadge{background:#3b6fd4}
+.zgrp.warm .zbadge{background:#d88a1f}
+.zgrp.hot .zbadge{background:#d63a2a}
+.zcnt{font-size:10px;color:var(--fg5);white-space:nowrap;line-height:1.2}
 .mini{padding:4px 7px;border-radius:5px;border:1px solid var(--brand);background:var(--surface);
  color:var(--brand);font-size:11px;line-height:1.4;cursor:pointer;flex-shrink:0;white-space:nowrap}
 .mini.warn{border-color:#c60;color:#c60}
@@ -282,12 +303,12 @@ body.dark .recf .dti{color-scheme:dark}
 .lb-pls{background:#0f9d8f}
 .betcard.rec-3d{border-left:4px solid #d98324}
 .betcard.rec-pls{border-left:4px solid #0f9d8f}
-/* ② 待核对角标：页签上的红点数字 */
+/* 待核对角标：页签上的红点数字 */
 .tabdot{display:inline-block;min-width:15px;height:15px;line-height:15px;margin-left:4px;
  padding:0 4px;border-radius:8px;background:#e53935;color:#fff;font-size:10.5px;font-weight:700;
  vertical-align:1px;text-align:center}
-#t-rec.on .tabdot{background:#fff;color:#e53935}
-/* ① 勾选要买的注 → 生成投注图片 */
+#t-mine.on .tabdot{background:#fff;color:#e53935}
+/* 勾选要买的注 → 生成投注图片 */
 .cartbox{margin:8px 12px 0;padding:10px 12px;border:1px solid var(--bd2);border-radius:10px;
  background:var(--surface2,var(--surface))}
 .cartbox .cbhd{display:flex;align-items:center;justify-content:space-between;gap:8px;
@@ -376,7 +397,7 @@ body.dark .toastbox{background:rgba(240,240,240,.94);color:#1a1a1a}
     <div id="side-adm" class="sideitem" onclick="closeSide();admOpen()" style="display:none">管理员<em id="m-adm">未登录</em></div>
     <div id="side-admgen" class="sideitem" onclick="closeSide();admShowGen()" style="display:none">生成授权码<em>页面内签发</em></div>
         <div class="sideitem" onclick="clearMyBets()">清除本机选号<em>仅本机</em></div>
-    <div class="sidenote">开奖数据由云端定时抓取中国福彩网 / 中国体彩官方接口并内置于本页，打开即是最新数据；本页面不做任何预测。</div>
+    <div class="sidenote">数据来自中国福彩网 / 中国体彩官方开奖结果；本页面不做任何预测。</div>
   </div>
 </div>
 <div id="modal"></div>
@@ -763,6 +784,7 @@ function admLogout(){
   var m=$('main');
   if(licBlocked()){
     if(m) m.innerHTML=renderLock();
+    renderLockChrome();
     licInitMenu();
   }else{
     render();
@@ -1107,8 +1129,9 @@ function renderLock(){
   var h='<div class="card" style="text-align:center;padding:30px 18px">';
   h+='<div style="font-size:17px;font-weight:700;margin-bottom:8px">🔒 需要授权才能使用</div>';
   h+='<div style="font-size:13px;color:#888;line-height:1.8">'
-    +'本页面已开启访问限制。<br>请输入管理员发给你的<b>授权码</b>，'
-    +'激活后即可正常使用（每台设备一次）。</div>';
+    +'本页面已开启访问限制。<br>'
+    +'请将本机设备码 <b style="color:var(--brand);letter-spacing:1px;font-size:14px">'+esc(licDevShow())+'</b>'
+    +' 发给管理员，用于生成授权码，激活后即可正常使用（每台设备一次）。</div>';
   h+='<div style="margin:18px 0 10px"><input id="lic-in" type="text" '
     +'placeholder="请输入授权码" autocomplete="off" spellcheck="false" '
     +'style="width:100%;max-width:280px;padding:11px 12px;font-size:15px;text-align:center;'
@@ -1116,27 +1139,33 @@ function renderLock(){
     +'background:var(--surface);color:var(--fg);text-transform:uppercase" '
     +'onkeydown="if(event.key===\'Enter\')licActivate()"></div>';
   h+='<div id="lic-msg" class="msg"></div>';
-  if(LICENSE){
-    h+='<div style="margin-top:14px;font-size:12px;color:#999;line-height:1.7">'
-      +'本机设备码 <b style="color:var(--brand);letter-spacing:1px;font-size:14px">'+esc(licDevShow())+'</b><br>'
-      +'<span style="font-size:11.5px">把它发给管理员，即可签发<b>只认这台设备</b>的授权码，'
-      +'换设备也激活不了。</span></div>';
-  }
   h+='<div style="margin-top:14px"><button class="p" style="min-width:120px" '
     +'onclick="licActivate()">激活</button></div>';
   h+='</div>';
   return h;
 }
-var S = {noApi:STATIC_BUILD, lot:'ssq', tab:'list',
+/* 「访问授权」面板里的「复制授权码」按钮：原按钮调用的函数并不存在 */
+function licCopyCode(){
+  var o=licGet();
+  if(o && o.code) copySmart(o.code,'已复制授权码','复制授权码');
+  else toast('本机还没有激活的授权码');
+}
+/* 锁屏时 render() 在 renderTabs() 之前就返回了，标签栏会是空的。
+   这里补一个最小标签栏，让侧边抽屉（含「管理员」「访问授权」）仍可打开；
+   管理员从菜单登录，锁屏卡片上不再放登录入口。 */
+function renderLockChrome(){
+  var el=$('tabs');
+  if(el) el.innerHTML='<button id="t-menu" onclick="openSide()">菜单</button>';
+}
+var S = {noApi:STATIC_BUILD, lot:'ssq', tab:'hist',
   admPwd:null,                         /* 改密成功页的明文，只留内存，刷新即消失 */
   listSort:{k:0,dir:-1}, listLimit:60,
-  /* 列表一次最多渲染多少期：再点下去 DOM 节点会撑爆手机，
-     更早的期号请用上方搜索框定位 */
-  distLimit:20,
+  /* 走势视图一次最多渲染多少期：再点下去 DOM 节点会撑爆手机 */
   trendNum:1, trendScope:'month', distLimit:20,
   fSort:{red:{k:1,dir:1}, blue:{k:1,dir:1}},
-  freqWin:'all',
-  heatWin:'month', heatSort:'num',
+  /* 蓝球分析：综合评分的排序条件，默认出现次数降序 */
+  blueSorts:[{k:'cnt',dir:-1}],
+  heatSort:'num',
   pickRed:[], pickBlue:[],
   /* 中奖核对 */
   chkRed:[], chkBlue:[], chkMode:'latest', chkIssue:'',
@@ -1166,16 +1195,18 @@ var S = {noApi:STATIC_BUILD, lot:'ssq', tab:'list',
   fs3SumMin:'', fs3SumMax:'', fs3SpanMin:'', fs3SpanMax:'', fs3Form:'any',
   /* 遗漏排行榜：显示条数 */
   missTop:10,
-  /* ⑤ 区间分布（三分区）窗口 */
+  /* 区间分布（三分区）窗口 */
   zoneWin:'month', zoneBars:20,
-  /* ⑧ 奖池走势：指标（奖池 / 销量 / 一等奖奖金）*/
+  /* 奖池走势：指标（奖池 / 销量 / 一等奖奖金）*/
   poolKind:'pool',
-  /* ① 勾选要买的注（存号码 key，不存序号，删中间的注也不会串位） */
+  /* 勾选要买的注（存号码 key，不存序号，删中间的注也不会串位） */
   cart:[], simMsg:'',
-  /* ③ 批量核对口径：auto=购买当期 / latest=最新一期 / issue=指定期号 */
+  /* 批量核对口径：auto=购买当期 / latest=最新一期 / issue=指定期号 */
   chkModeB:'auto', chkIssB:{},
   /* 「我的收藏」页：彩种筛选（all / ssq / dlt / 3d / pls）、全局删除确认键 */
   favFilter:'all', favDelG:'',
+  /* 猜号参考：红球与蓝球数字是否重合 / 本批已存入的注 */
+  guessRB:'any', guessSaved:{},
   /* 管理员签发授权码 */
   admUnit:'month', admVal:3, admN:1, admOut:[], admDev:''};
 
@@ -1297,7 +1328,7 @@ function showLoading(){
      它们会误显示「大乐透」。改用统一名称表 LOTNAME（在第 1327 行附近定义）。 */
   var n = (typeof LOTNAME!=='undefined' && LOTNAME && LOTNAME[S.lot]) || '该彩种';
   $('main').innerHTML='<div class="card"><div class="state"><div class="spin"></div>'
-    +'正在获取'+n+'最新开奖数据…<br><span style="font-size:12px;color:#aaa">首次加载需从官方接口抓取，请稍候</span></div></div>';
+    +'正在加载'+n+'开奖数据…<br><span style="font-size:12px;color:#aaa">请稍候</span></div></div>';
 }
 function showError(msg){
   $('main').innerHTML='<div class="card"><div class="state err">数据获取失败<br>'
@@ -1353,7 +1384,7 @@ function listRows(){
   return arr;
 }
 function setListQ(v){ S.listQ=v; S.listLimit=60; render(); }
-/* ② 开奖历史：表格 / 走势图 双视图切换。
+/* 开奖历史：表格 / 走势图 双视图切换。
    两者是同一批数据的两种呈现方式，合并为一个页签，省去来回切页签。
    注意：两个视图的展开量（S.listLimit / S.distLimit）各自独立保留。 */
 function histViewBar(){
@@ -1422,6 +1453,84 @@ function sortList(k){
 /* ---------- 号码走势 ---------- */
 /* 只画「历史号码分布」圆点图 + 单号统计卡，不画折线 */
 
+/* ---------- 和值走势（选号型 / 按位型共用） ----------
+   和值＝当期号码之和：选号型取红球（前区），按位型取三位数字。
+   纵轴固定用「全历史」范围，不随窗口变化而缩放；金色虚线是全历史均值，
+   只作参照。折线仅是已开奖结果的连线，不代表任何可外推的规律。 */
+function sumTrendBlock(rows, label){
+  var d=D[S.lot], all=d.rows, ink=svgInk(), i, v;
+  if(!rows||rows.length<2||!all.length) return '';
+  var lo=Infinity, hi=-Infinity, tot=0;
+  for(i=0;i<all.length;i++){
+    v=sumRed(all[i]);
+    if(v<lo) lo=v;
+    if(v>hi) hi=v;
+    tot+=v;
+  }
+  var avg=tot/all.length, pad=Math.max(2,(hi-lo)*0.08);
+  var y0=Math.max(0,Math.floor(lo-pad)), y1=Math.ceil(hi+pad);
+  if(y1<=y0) y1=y0+1;
+  var N=rows.length, vals=[], wmin=Infinity, wmax=-Infinity;
+  for(i=0;i<N;i++){
+    vals.push(sumRed(rows[i]));
+    if(vals[i]<wmin) wmin=vals[i];
+    if(vals[i]>wmax) wmax=vals[i];
+  }
+  var last=vals[N-1];
+  var PL=36, PR=16, PT=16, PB=28, H=196;
+  var W=Math.max(320, Math.min(1800, 48+N*14));
+  var iw=W-PL-PR, ih=H-PT-PB;
+  function X(k){ return PL + (N>1? k*iw/(N-1) : iw/2); }
+  function Y(t){ return PT + ih - (t-y0)/(y1-y0)*ih; }
+  var accent=isDark()?'#e8b13a':'#c98a00';
+  function mini(k,val,col){
+    return '<div style="flex:1;min-width:70px;background:var(--surface2);border-radius:8px;padding:7px 9px">'
+      +'<div style="font-size:11px;color:var(--fg4,#999)">'+k+'</div>'
+      +'<div style="font-size:17px;font-weight:700;'+(col?'color:'+col+';':'')+'">'+val+'</div></div>';
+  }
+  var h='<div class="sec">和值走势</div>'
+    +'<div style="display:flex;gap:8px;padding:9px 12px 2px;flex-wrap:wrap">'
+    +mini('最新',last,accent)+mini('全史均值',avg.toFixed(1))
+    +mini('本窗口',wmin+'~'+wmax)+mini('全史范围',lo+'~'+hi)
+    +'</div>';
+  var sv='<div class="svgwrap" style="overflow-x:auto"><svg viewBox="0 0 '+W+' '+H+'" '
+    +'width="'+W+'" height="'+H+'" style="display:block;background:var(--surface);border-radius:8px">';
+  for(var g=0;g<=4;g++){
+    var gv=y0+(y1-y0)*g/4, gy=Y(gv);
+    sv+='<line x1="'+PL+'" y1="'+gy.toFixed(1)+'" x2="'+(W-PR)+'" y2="'+gy.toFixed(1)
+      +'" stroke="'+ink.line+'" stroke-width="1" opacity=".55"/>'
+      +'<text x="'+(PL-7)+'" y="'+(gy+3.5).toFixed(1)+'" font-size="10" fill="'+ink.head
+      +'" text-anchor="end">'+Math.round(gv)+'</text>';
+  }
+  var ay=Y(avg);
+  sv+='<line x1="'+PL+'" y1="'+ay.toFixed(1)+'" x2="'+(W-PR)+'" y2="'+ay.toFixed(1)
+    +'" stroke="'+accent+'" stroke-width="1.2" stroke-dasharray="5 4" opacity=".85"/>'
+    +'<text x="'+(W-PR-2)+'" y="'+(ay-5).toFixed(1)+'" font-size="10" fill="'+accent
+    +'" text-anchor="end">均值 '+avg.toFixed(1)+'</text>';
+  var pts='';
+  for(i=0;i<N;i++) pts+=(i?' ':'')+X(i).toFixed(1)+','+Y(vals[i]).toFixed(1);
+  sv+='<polyline points="'+pts+'" fill="none" stroke="#2b6cd4" stroke-width="1.8" '
+    +'stroke-linejoin="round" stroke-linecap="round"/>';
+  for(i=0;i<N;i++){
+    var cx=X(i), cy=Y(vals[i]), rr=(i===N-1)?3.8:1.9;
+    sv+='<circle cx="'+cx.toFixed(1)+'" cy="'+cy.toFixed(1)+'" r="'+rr+'" fill="'
+      +(i===N-1?accent:'#2b6cd4')+'"/>';
+  }
+  sv+='<text x="'+X(N-1).toFixed(1)+'" y="'+(Y(last)-9).toFixed(1)+'" font-size="11" '
+    +'font-weight="700" fill="'+accent+'" text-anchor="end">'+last+'</text>';
+  sv+='<text x="'+PL+'" y="'+(H-8)+'" font-size="10" fill="'+ink.head+'">'+rows[0][0]+'</text>'
+    +'<text x="'+(W-PR)+'" y="'+(H-8)+'" font-size="10" fill="'+ink.head
+    +'" text-anchor="end">'+rows[N-1][0]+'</text>';
+  sv+='</svg></div>';
+  h+=sv;
+  h+='<div class="lgd"><span class="lgb" style="background:#2b6cd4"></span>每期和值'
+    +'<span class="lgb" style="background:'+accent+';margin-left:8px"></span>全历史均值（虚线）'
+    +'<span style="margin-left:auto">'+label+'</span></div>';
+  h+='<div class="note">和值＝当期'+(isPos()?'三位数字':d.redLabel)+'之和。'
+    +'纵轴固定为<b>全历史范围</b>，切换窗口不会改变刻度；连线只是已开奖结果，不代表任何规律。</div>';
+  return h;
+}
+
 /* 期数范围：近一个月 / 近一年 / 全部（按开奖日期计算） */
 function scopeRows(kind){
   var all=D[S.lot].rows;
@@ -1446,6 +1555,7 @@ function renderTrend(){
   var h='<div class="card"><div class="bar"><label>历史号码分布</label>'
    +'<label style="color:#aaa;font-size:12px">共 '+all.length+' 期，默认最新 '+lim+' 期</label></div>';
   h+=distChart(disp,d,all.length,lim);
+  h+=sumTrendBlock(disp.slice().reverse(), '最新 '+disp.length+' 期');
   h+=numStatCard();
   h+='<div class="note">左列＝开奖日期，圆点＝该期开出的'+d.redLabel+'。'
     +'均为<b>已开奖结果的统计</b>，每个号码每期出现概率恒定，历史冷热不影响未来。</div></div>';
@@ -1493,7 +1603,7 @@ function distChart(rows,d,total,lim){
   for(var i=0;i<rows.length;i++){
     var y=headH+i*rh, cy=y+rh/2;
     if(i%2===1) s+='<rect x="0" y="'+y+'" width="'+W+'" height="'+rh+'" fill="'+ink.zebra+'"/>';
-    /* 第一行：期号（与开奖记录完全一致） */
+    /* 第一行：期号（与表格视图一致） */
     s+='<text x="'+xr+'" y="'+(cy-2)+'" font-size="8" fill="'+ink.issue+'" text-anchor="end"'
       +' font-weight="600">'+rows[i][0]+'</text>';
     /* 第二行：完整开奖日期（含年份） */
@@ -1620,7 +1730,7 @@ function freqData(isBlue,win){
   for(var n2=1;n2<=max;n2++) out.push({num:n2,cnt:cnt[n2],pct:draws?cnt[n2]/(draws*per)*100:0});
   return out;
 }
-/* ① 出现次数（非按位）—— 只出红球，蓝球统一收敛到「蓝球分析」页签 */
+/* 出现次数（非按位）—— 只出红球，蓝球统一收敛到「蓝球分析」页签 */
 function renderFreq(){
   var d=D[S.lot];
   var win=statWinGet(), sc=scopeRows(win), rows=sc.rows;
@@ -1718,7 +1828,13 @@ function heatBlock(isBlue,title,tag){
 
 /* ---------- 我的选号 ---------- */
 function betKey(){return 'myBets_'+S.lot}
-function getBets(){ try{ return JSON.parse(localStorage.getItem(betKey())||'[]'); }catch(e){ return []; } }
+function getBets(){
+  try{
+    var a=JSON.parse(localStorage.getItem(betKey())||'[]');
+    if(normBetList(a)) localStorage.setItem(betKey(), JSON.stringify(a));
+    return Array.isArray(a)?a:[];
+  }catch(e){ return []; }
+}
 function saveBets(a){ try{ localStorage.setItem(betKey(), JSON.stringify(a)); }catch(e){} pendClear(); }
 function togglePick(n,isBlue){
   var arr=isBlue?S.pickBlue:S.pickRed, i=arr.indexOf(n);
@@ -1764,7 +1880,7 @@ function addBet(){
   var bet={r:S.pickRed.slice(), b:S.pickBlue.slice(), t:Date.now(), bought:0};
   var sm=simCheck(S.lot, bet);
   if(sm.same){ toast('这注已经保存过了（'+fmtTs(sm.same.o.t)+'），不必重复添加'); return; }
-  var a=getBets(); a.push(bet); saveBets(a); addRec(S.lot, bet);
+  var a=getBets(); a.push(bet); saveBets(a);
   S.pickRed=[];S.pickBlue=[];
   simFlash(sm);
   render();
@@ -1778,7 +1894,6 @@ function addBet3(){
   var sm=simCheck(S.lot, bet);
   if(sm.same){ toast('这注已经保存过了（'+fmtTs(sm.same.o.t)+'），不必重复添加'); return; }
   var a=getBets(); a.push(bet); saveBets(a);
-  addRec(S.lot, bet);
   S.pick3=[null,null,null];
   simFlash(sm);
   render();
@@ -1826,31 +1941,41 @@ function clearBets(){
   saveBets([]); render();
   if(typeof toast==='function') toast(n? ('已清空，并取消 '+n+' 组收藏') : '已清空');
 }
-/* 我的选号：标记「已购买」，单向不可撤销，并同步到选号记录里同一条（按保存时间匹配） */
+/* 我的选号：标记「已购买」，单向不可撤销。
+   选号记录只归档已购买的注，所以这一步才把该注写入记录。 */
 function toggleBetBought(i){
   var a=getBets();
   if(!a[i]) return;
   if(a[i].bought){ if(typeof toast==='function') toast('已经标记为已购买，不能改回'); return; }
-  a[i].bought = 1;
+  a[i].bought = 1; a[i].chk = 0;
   saveBets(a);
-  /* 同步到记录：只置 1，绝不回退 */
-  var recs=getRecs(), t=a[i].t, changed=false;
-  for(var k=0;k<recs.length;k++){
-    if(recs[k].lot===S.lot && recs[k].t===t){ recs[k].bought=1; changed=true; break; }
-  }
-  if(changed) saveRecs(recs);
+  archiveBought(S.lot, a[i]);
   render();
-  if(typeof toast==='function') toast('已标记为已购买');
+  if(typeof toast==='function') toast('已标记为已购买，并归档到选号记录');
 }
 
 /* ---------- 我的选号记录（长期归档） ---------- */
 /* 与「我的选号」分开：选号是当期工作列表，会被清掉；记录长期保留，可回溯 */
-function getRecs(){ try{ return JSON.parse(localStorage.getItem('lc_rec')||'[]'); }catch(e){ return []; } }
+function getRecs(){
+  try{
+    var a=JSON.parse(localStorage.getItem('lc_rec')||'[]');
+    if(!Array.isArray(a)) return [];
+    var ch=normBetList(a), b=[], i;
+    /* 只归档已购买的注：清掉早期版本自动写入的「未购买」条目 */
+    for(i=0;i<a.length;i++) if(a[i] && a[i].bought) b.push(a[i]);
+    if(b.length!==a.length){ a=b; ch=true; }
+    if(ch) localStorage.setItem('lc_rec', JSON.stringify(a));
+    return a;
+  }catch(e){ return []; }
+}
 function saveRecs(a){ try{ localStorage.setItem('lc_rec', JSON.stringify(a)); }catch(e){} pendClear(); }
-function addRec(lot,bet,bought){
-  var a=getRecs();
-  a.push({lot:lot, r:bet.r.slice(), b:bet.b.slice(), t:bet.t||Date.now(),
-          bought:bought?1:0});
+/* 只有「标记为已买」才会调用；同一注重复标记不会产生第二条 */
+function archiveBought(lot,bet){
+  var a=getRecs(), t=bet.t||Date.now(), i, hit=-1;
+  for(i=0;i<a.length;i++) if(a[i].lot===lot && a[i].t===t){ hit=i; break; }
+  if(hit>=0){ a[hit].bought=1; a[hit].chk=bet.chk||0; }
+  else a.push({lot:lot, r:(bet.r||[]).slice(), b:(bet.b||[]).slice(),
+               t:t, bought:1, chk:bet.chk||0});
   if(a.length>500) a=a.slice(a.length-500);   /* 最多留 500 条 */
   saveRecs(a);
 }
@@ -1863,15 +1988,6 @@ function delRec(i){
   unfavToast(un, '已删除');
 }
 function cancelRecDel(){ S.recDel=-1; S.recClear=false; render(); }
-/* 选号 ≠ 购买：默认记为「未购买」，真买了点「标记为已买」改成「已购买」，单向不可改回 */
-function toggleBought(i){
-  var a=getRecs();
-  if(!a[i]) return;
-  if(a[i].bought){ if(typeof toast==='function') toast('已经标记为已购买，不能改回'); return; }
-  a[i].bought = 1;
-  saveRecs(a); render();
-  if(typeof toast==='function') toast('已标记为已购买');
-}
 function clearRecs(){
   if(!S.recClear){ S.recClear=true; S.recDel=-1; render(); return; }
   var a=getRecs(), n=0, i;
@@ -1896,10 +2012,11 @@ function recRow(rec, opt){
     return null;
   }
   if(opt && opt.latest) return rows[rows.length-1];
-  if(!rec.t) return rows[rows.length-1];
+  var _t=normTs(rec.t);
+  if(!_t) return rows[rows.length-1];
   /* rows 按开奖日期升序。从后往前找：最后一个「早于购买时刻」的期次，
      它的下一期就是买的那期。绝大多数记录都是近期买的，这样几乎一次命中。 */
-  for(i=rows.length-1;i>=0;i--) if(drawMs(rows[i],rec.lot) < rec.t) return rows[i+1]||null;
+  for(i=rows.length-1;i>=0;i--) if(drawMs(rows[i],rec.lot) < _t) return rows[i+1]||null;
   return rows[0];   /* 买在所有已知期次之前 → 用最早一期，不会返回空 */
 }
 function recResult(rec, opt){
@@ -1948,7 +2065,7 @@ function pendCheckCount(){
   _pcCache={t:Date.now(), n:pendCheckList().length};
   return _pcCache.n;
 }
-/* ② 待核对提醒的专用入口：只看「该对还没对」的注，不受记录页筛选影响 */
+/* 待核对提醒的专用入口：只看「该对还没对」的注，不受记录页筛选影响 */
 function pendCheckRun(){
   var list=pendCheckList(), i;
   if(!list.length){ toast('没有待核对的记录'); return; }
@@ -1970,14 +2087,35 @@ function pendCheckRun(){
     +'<div style="padding:0 12px">'+h+'</div>'
     +'<div class="betops" style="margin:8px 12px 10px"><button onclick="closeHelp();pendClear();render()">关闭</button></div>');
 }
+/* 时间统一成毫秒时间戳。早期「猜号存入」把 t 写成 'YYYY-MM-DD HH:mm' 字符串，
+   所有按期次比对的地方都会得到 NaN，自动对奖会错用全史最早一期。读时归一化并回写。 */
+function normTs(t){
+  if(typeof t==='number' && isFinite(t)) return t;
+  if(typeof t==='string'){
+    var v=Date.parse(t.replace(/-/g,'/'));
+    if(isFinite(v)) return v;
+  }
+  return Date.now();
+}
+/* 把列表里非数字时间戳就地转成毫秒，返回是否需要回写 */
+function normBetList(a){
+  var ch=false, i;
+  if(!Array.isArray(a)) return false;
+  for(i=0;i<a.length;i++){
+    if(!a[i]) continue;
+    var v=a[i].t?normTs(a[i].t):0;
+    if(v!==a[i].t){ a[i].t=v; ch=true; }
+  }
+  return ch;
+}
 function fmtTs(t){
-  var x=new Date(t), p=function(n){return ('0'+n).slice(-2)};
+  var x=new Date(normTs(t)), p=function(n){return ('0'+n).slice(-2)};
   return x.getFullYear()+'-'+p(x.getMonth()+1)+'-'+p(x.getDate())+' '+p(x.getHours())+':'+p(x.getMinutes());
 }
 /* 筛选：彩种 / 购买状态 / 开奖状态 / 日期区间。返回原始下标，保证删除、标记仍对准 */
 function recFilterGet(){
-  /* 默认只显示「已购买」：选号不等于购买，没买的默认不占版面 */
-  if(!S.recF) S.recF={lot:'',buy:'1',res:'',from:'',to:''};
+  /* 记录里全是已购买的注，筛选只保留彩种 / 开奖状态 / 日期 */
+  if(!S.recF) S.recF={lot:'',res:'',from:'',to:''};
   return S.recF;
 }
 function recFiltered(){
@@ -1985,8 +2123,6 @@ function recFiltered(){
   for(i=0;i<recs.length;i++){
     var rc=recs[i];
     if(f.lot && rc.lot!==f.lot) continue;
-    if(f.buy==='1' && !rc.bought) continue;
-    if(f.buy==='0' && rc.bought)  continue;
     var r=recResult(rc), st=r?r.state:'none';   /* wait=待开奖 done=已开奖 */
     if(f.res==='wait' && st!=='wait') continue;
     if(f.res==='done' && st!=='done') continue;
@@ -1998,7 +2134,7 @@ function recFiltered(){
   return out;
 }
 function setRecF(k,v){ recFilterGet()[k]=v; S.recDel=-1; S.recClear=false; render(); }
-function resetRecF(){ S.recF={lot:'',buy:'1',res:'',from:'',to:''}; S.recDel=-1; S.recClear=false; render(); }
+function resetRecF(){ S.recF={lot:'',res:'',from:'',to:''}; S.recDel=-1; S.recClear=false; render(); }
 function renderRecFilter(){
   var f=recFilterGet(), h='';
   h+='<div class="recf">';
@@ -2016,7 +2152,7 @@ function renderRecFilter(){
     +'<input type="date" class="dti" value="'+esc(f.from)+'" onchange="setRecF(\'from\',this.value)">'
     +'<span style="color:#aaa;padding:0 2px">至</span>'
     +'<input type="date" class="dti" value="'+esc(f.to)+'" onchange="setRecF(\'to\',this.value)"></div>';
-  var on = f.lot||f.res||f.from||f.to;   /* buy 恒为已购买，不算筛选条件 */
+  var on = f.lot||f.res||f.from||f.to;
   h+='<div class="btns" style="margin-top:2px">'
     +'<button class="g" onclick="resetRecF()">'+(on?'清除筛选':'重置')+'</button></div>';
   h+='</div>';
@@ -2035,7 +2171,7 @@ function backupRemind(){
 }
 function renderRec(){
   var recs=getRecs(), h=backupRemind();
-  /* ② 待核对提醒：买了、那期也开了、但自己还没对过 → 主动提醒，不用自己记着回来 */
+  /* 待核对提醒：买了、那期也开了、但自己还没对过 → 主动提醒，不用自己记着回来 */
   var pc=pendCheckCount();   /* 走 1.5 秒缓存，避免整页重绘时反复扫描期次表 */
   if(pc){
     h+='<div class="upd" style="color:#c33">🔔 有 <b>'+pc+'</b> 注已开奖还没核对'
@@ -2044,16 +2180,14 @@ function renderRec(){
   }
   h+='<div class="sec">我的选号记录</div>'
     +'<div style="font-size:12px;color:#888;padding:0 12px 8px">'
-    +'每次添加的选号都会自动归档到这里并长期保留（存在本机浏览器，最多 500 条），'
-    +'换设备或清理浏览器数据会丢失。<br>'
-    +'<b>选号不等于购买</b>：添加的选号默认「未购买」，真的买了请在「我的选号」里点'
-    +'<b>「标记为已买」</b>，标记后<b>不能改回</b>。<br>'
-    +'<b>这里只显示「已购买」</b>的记录——没买的不会出现在列表中。<br>'
-    +'<b>批量核对</b>＝一键把当前筛选出的记录跟各彩种最新一期比对，不必逐注手选号码；'
-    +'<b>备份 / 恢复</b>＝导出成 txt 保存，换设备后导回（记录存在本机，清缓存会丢）。</div>';
+    +'这里<b>只保存已购买的号码</b>：添加或存入的注先留在「我的选号」，'
+    +'点<b>「标记为已买」</b>后自动归档到这里并长期保留（本机浏览器，最多 500 条）。<br>'
+    +'<b>已购买</b>为单向操作，标记后不能改回；可按彩种 / 开奖状态 / 日期筛选。<br>'
+    +'<b>批量核对</b>＝一键把当前筛选出的记录跟各彩种开奖号比对；'
+    +'<b>备份 / 恢复</b>＝导出成 txt 保存，换设备后导回（清缓存会丢）。</div>';
   if(!recs.length)
-    return h+'<div class="empty">还没有选号记录<br><span style="font-size:12px">'
-      +'在「我的选号」里添加号码后会自动出现在这里</span></div>';
+    return h+'<div class="empty">还没有已购买的选号记录<br><span style="font-size:12px">'
+      +'在「我的选号」里点「标记为已买」后会自动出现在这里</span></div>';
   h+=renderRecFilter();
   var idx=recFiltered();
   var won=0, amt=0, pend=0, bought=0, i;
@@ -2073,7 +2207,7 @@ function renderRec(){
     +(idx.length===recs.length
         ? '共 <b>'+recs.length+'</b> 条记录'
         : '筛选出 <b>'+idx.length+'</b> 条（共 '+recs.length+' 条）')
-    +'（均为已购买）：'+sum+'</div>';
+    +'：'+sum+'</div>';
   if(!idx.length)
     return h+'<div class="empty">没有符合条件的记录<br><span style="font-size:12px">'
       +'试试放宽筛选条件，或点「清除筛选」</span></div>';
@@ -2114,14 +2248,13 @@ function renderRec(){
         +'<button onclick="cancelRecDel()">取消</button></div>';
     else
       h+='<div class="betops" style="margin:8px 0 0">'
-        +(isB?'':'<button onclick="toggleBought('+i+')">标记为已买</button>')
         +'<button class="delbtn" onclick="delRec('+i+')">删除</button></div>';
     h+='</div>';
   }
   return h;
 }
 
-/* ================= ② 添加到桌面（PWA） ================= */
+/* ================= 添加到桌面（PWA） ================= */
 function showPwa(){
   var ios=/iPad|iPhone|iPod/.test(navigator.userAgent);
   var h='<div class="sec">添加到桌面</div>'
@@ -2161,7 +2294,7 @@ function betsOfAll(){
   for(i=0;i<BK_LOTS.length;i++){
     var a=[]; try{ a=JSON.parse(localStorage.getItem('myBets_'+BK_LOTS[i])||'[]'); }catch(e){ a=[]; }
     for(j=0;j<a.length;j++)
-      out.push({lot:BK_LOTS[i], r:a[j].r||[], b:a[j].b||[], t:a[j].t||0,
+      out.push({lot:BK_LOTS[i], r:a[j].r||[], b:a[j].b||[], t:a[j].t?normTs(a[j].t):0,
                bought:a[j].bought?1:0, chk:a[j].chk?1:0});
   }
   return out;
@@ -2175,7 +2308,7 @@ function favOfAll(){
   }
   return out;
 }
-/* 常用号码本一行：彩种|名称|号码 */
+/* 收藏一行：彩种|名称|号码 */
 function bkFavLine(x){
   var d=D[x.lot], nums;
   if(d && d.positional) nums=(x.r||[]).join(' ');
@@ -2194,8 +2327,8 @@ function ymd(){
   return d.getFullYear()+p(d.getMonth()+1)+p(d.getDate());
 }
 function backupTxt(){
-  /* 只备份「我的选号」，且只备份已购买的：
-     选号记录与我的选号本来就是同一份数据（都存 myBets_），
+  /* 只备份「我的选号」里已购买的注：
+     选号记录（lc_rec）是已购买注的归档视图，号码都来自 myBets_，
      两段一起导会完全重复；未购买的只是临时草稿，不值得占用备份。 */
   var all=betsOfAll(), bets=[], i;
   for(i=0;i<all.length;i++) if(all[i].bought) bets.push(all[i]);
@@ -2222,7 +2355,7 @@ function backupDownload(){
   var all=betsOfAll(), n=0, i;
   for(i=0;i<all.length;i++) if(all[i].bought) n++;
   var nf=favOfAll().length;
-  /* 常用号码本也值得备份：即使还没买过号，收藏的号也不能丢 */
+  /* 收藏也值得备份：即使还没买过号，收藏的号也不能丢 */
   if(!n && !nf){ toast('没有已购买的选号，也没有收藏，无需备份'); return; }
   var txt=backupTxt();
   try{
@@ -2242,8 +2375,8 @@ function parseTs(s){
   return isNaN(t.getTime())?Date.now():t.getTime();
 }
 function parseBackup(txt){
-  /* 分两段：我的选号（彩种|号码|状态|时间）与常用号码本（彩种|名称|号码）。
-     用段落标记切换，避免两种格式混淆。 */
+  /* 分两段：我的选号（彩种|号码|状态|时间）与我的收藏（彩种|名称|号码）。
+     用段落标记切换；旧备份里的段名「常用号码本」仍按收藏解析，避免老文件恢复时丢号。 */
   var lines=String(txt||'').split(/\r?\n/), recs=[], bets=[], favs=[], bad=0, i;
   var sec='bets';
   for(i=0;i<lines.length;i++){
@@ -2263,7 +2396,7 @@ function parseBackup(txt){
     for(k in LOTNAME) if(LOTNAME[k]===nm){ lot=k; break; }
     if(!lot){ bad++; continue; }
     if(sec==='fav'){
-      /* 常用号码本：彩种|名称|号码 */
+      /* 收藏：彩种|名称|号码 */
       if(p.length<3){ bad++; continue; }
       var fs2=p[2].split('+'), fr=[], fb=[], fq;
       var frs=fs2[0].trim().split(/\s+/);
@@ -2335,7 +2468,7 @@ function backupApply(mode){
     return x.lot+'|'+(x.r||[]).join(',')+'|'+(x.b||[]).join(',')+'|'+ds;
   };
   var i, j, addR=0, addB=0;
-  /* ① 选号记录 */
+  /* 选号记录 */
   var recs=(mode==='overwrite')?[]:getRecs(), have={};
   for(i=0;i<recs.length;i++) have[key(recs[i])]=1;
   for(i=0;i<p.recs.length;i++)
@@ -2343,7 +2476,7 @@ function backupApply(mode){
   recs.sort(function(a,b){ return (a.t||0)-(b.t||0); });
   if(recs.length>500) recs=recs.slice(recs.length-500);
   saveRecs(recs);
-  /* ② 我的选号：按彩种分别存放 */
+  /* 我的选号：按彩种分别存放 */
   var byLot={};
   for(i=0;i<p.bets.length;i++) (byLot[p.bets[i].lot]=byLot[p.bets[i].lot]||[]).push(p.bets[i]);
   for(i=0;i<BK_LOTS.length;i++){
@@ -2359,7 +2492,7 @@ function backupApply(mode){
       if(!hv[key(arr[j])]){ cur.push({r:arr[j].r,b:arr[j].b,t:arr[j].t,bought:arr[j].bought}); hv[key(arr[j])]=1; addB++; }
     try{ localStorage.setItem('myBets_'+lot, JSON.stringify(cur)); }catch(e){}
   }
-  /* ③ 常用号码本 */
+  /* 收藏 */
   var addF=0, fk=function(x){ return x.lot+'|'+(x.r||[]).join(',')+'|'+(x.b||[]).join(','); };
   var favArr=p.favs||[], byFav={};
   for(i=0;i<favArr.length;i++) (byFav[favArr[i].lot]=byFav[favArr[i].lot]||[]).push(favArr[i]);
@@ -2398,7 +2531,7 @@ function modalBox(inner,closeFn){
   $('modal').innerHTML='<div class="mask" onclick="if(event.target===this)'+c+'()">'
     +'<div class="modal">'+inner+'</div></div>';
 }
-/* ⑤ 统一弹窗（带标题栏）：以前 18 处各自手写一整串 mask/modal/mh/mb 标签，
+/* 统一弹窗（带标题栏）：以前 18 处各自手写一整串 mask/modal/mh/mb 标签，
    现在只写标题和内容，关闭函数可自定义（如收藏命名弹窗用 favNameCancel）。 */
 function modalPanel(title,body,closeFn){
   var c=closeFn||'closeHelp';
@@ -2855,7 +2988,7 @@ function toggleChk(n,isBlue){
   }
   render();
 }
-/* ───────── ⑥ 中奖核对：从「我的选号」/「我的收藏」导入 ─────────
+/* ───────── 中奖核对：从「我的选号」/「我的收藏」导入 ─────────
    原来要对奖必须手动点 7 次球，而号码往往早就存在本机了。
    这里提供一键导入，消灭重复录入。 */
 function chkImportList(){
@@ -3097,12 +3230,36 @@ function matchCond(r){
   }
   return true;
 }
+/* 条件机选同样先定蓝球再采红球：must 把蓝球数字放进红球，
+   avoid 从红球里排掉蓝球数字，再交给 matchCond 检查形态。
+   蓝球由调用方先定好并传入，重试时保持不变，避免红球种子与蓝球对不上。 */
+function genRedCand(d, blues){
+  var rb=S.guessRB||'any', ban={}, seed=0, pool=[], i, v, r=[], k=0;
+  if(rb==='avoid'){
+    for(i=0;i<blues.length;i++) if(blues[i]<=d.redMax) ban[blues[i]]=1;
+  }else if(rb==='must'){
+    for(i=0;i<blues.length;i++) if(blues[i]<=d.redMax) pool.push(blues[i]);
+    if(pool.length) seed=pool[Math.floor(Math.random()*pool.length)];
+  }
+  if(seed){ r.push(seed); ban[seed]=1; }
+  while(r.length<d.redCount && k++<2000){
+    v=1+Math.floor(Math.random()*d.redMax);
+    if(ban[v]||r.indexOf(v)>=0) continue;
+    r.push(v);
+  }
+  return r.sort(function(a,b){return a-b});
+}
+function genPlanBlues(d, idx){
+  if(isPos()||!d.blueMax) return [];
+  return guessPlanBlues(guessBlueSpec(), idx, (d.blueCount||1), d.blueMax);
+}
 function genByCond(){
   var d=D[S.lot], i, tries=0, found=null, MAX=60000;
+  var plan0=genPlanBlues(d,0);
   var n=Math.max(1,Math.min(5,S.genCount||1));
   while(tries<MAX){
     tries++;
-    var r=randN(d.redCount,d.redMax);
+    var r=genRedCand(d,plan0);
     if(matchCond(r)){ found=r; break; }
   }
   if(!found){
@@ -3112,7 +3269,7 @@ function genByCond(){
   if(n===1){
     /* 单注：填入上方选号区，可再自行调整 */
     S.pickRed=found.slice();
-    S.pickBlue=randN(d.blueCount,d.blueMax);
+    S.pickBlue=plan0.slice();
     S.genMsg='已生成（随机尝试 '+tries+' 次命中）· 和值 '+sumRed({2:found});
   } else {
     /* 多注：直接加入已保存列表，避免互相覆盖 */
@@ -3121,19 +3278,19 @@ function genByCond(){
       var rr=null, t2=0;
       while(t2<MAX){
         t2++;
-        var cand=randN(d.redCount,d.redMax);
+        var planK=genPlanBlues(d,k), cand=genRedCand(d,planK);
         if(!matchCond(cand)) continue;
         var key=cand.join(',');
         if(used[key]) continue;
         rr=cand; used[key]=1; break;
       }
       if(!rr) break;
-      made.push({r:rr.slice(), b:randN(d.blueCount,d.blueMax), t:Date.now()+k});
+      made.push({r:rr.slice(), b:planK.slice(), t:Date.now()+k});
     }
     if(!made.length){
       S.genMsg='条件太严，没能生成，放宽一点再试。';
     } else {
-      for(k=0;k<made.length;k++){ a.push(made[k]); addRec(S.lot, made[k]); }
+      for(k=0;k<made.length;k++){ a.push(made[k]); }
       saveBets(a);
       var sums=[], z;
       for(z=0;z<made.length;z++) sums.push(sumRed({2:made[z].r}));
@@ -3205,7 +3362,7 @@ function renderGen(){
   h+='</div>';
   return h;
 }
-/* ================= ③ 常用号码本（收藏） =================
+/* ================= 我的收藏 =================
    把常买的号（生日、纪念日、车牌号）存下来并起个名，下次一键载入。
    存在本机 localStorage，不会上传；备份时会一并带上。 */
 function favKey(){ return 'favBets_'+S.lot; }
@@ -3678,7 +3835,7 @@ function qrDataUrl(t){
   try{ return cv.toDataURL('image/png'); }catch(e){ return null; }
 }
 
-/* ================= ⑥ 二维码同步（换手机不丢收藏） =================
+/* ================= 二维码同步（换手机不丢收藏） =================
    把四个彩种的收藏编成一段紧凑文本 → 生成二维码。
    另一台手机用微信/系统相机扫出文本，粘进「扫码导入」即可。
    纯前端完成，不需要服务器。数据量大到二维码装不下时提示改用 txt 备份。 */
@@ -3792,7 +3949,7 @@ function syncDoImport(){
 }
 
 
-/* ================= ⑤ 守号追踪 =================
+/* ================= 守号追踪 =================
    老彩民常守一组号守很久。这里回答三个问题：
    守了多少期、期间中过什么、历史上最接近的一次是什么样。
    只统计期数和奖级次数，不涉及金额——这是娱乐工具，不做盈亏账。 */
@@ -3981,7 +4138,7 @@ function pasteFill(){
 function pasteSave(){
   var r=pasteParse(); if(!r) return;
   var bet={r:r.r.slice(), b:isPos()?[]:r.b.slice(), t:Date.now(), bought:0};
-  var a=getBets(); a.push(bet); saveBets(a); addRec(S.lot, bet);
+  var a=getBets(); a.push(bet); saveBets(a);
   toast('已保存这注'); render();
 }
 function pasteFav(){
@@ -3996,7 +4153,7 @@ function pasteFav(){
   });
 }
 
-/* ================= ① 勾选要买的注 → 生成投注图片 =================
+/* ================= 勾选要买的注 → 生成投注图片 =================
    选完号到店里这一步以前完全没有工具接手：一堆历史记录混在一起，
    分不清这回到底要买哪几注。勾选后生成一张可以直接递给老板看的单子。 */
 function betKeyOf(bet){ return (bet.r||[]).join(',')+'|'+(bet.b||[]).join(','); }
@@ -4017,28 +4174,23 @@ function cartList(){
 function cartClear(){ S.cart=[]; render(); }
 function slipBuyAll(){
   var list=cartList(), a=getBets(), n=0, i, j;
-  var recs=getRecs();
   for(i=0;i<list.length;i++){
     var x=list[i].bet;
     for(j=0;j<a.length;j++){
       if(a[j].t!==x.t || betKeyOf(a[j])!==betKeyOf(x)) continue;
       if(a[j].bought) break;
       a[j].bought=1; a[j].chk=0; n++;
-      /* myBets_ 和选号记录是两份存档，两边都要标记，否则记录页看不到 */
-      for(var q=0;q<recs.length;q++)
-        /* 老记录可能没存 lot，只要保存时刻对得上就算同一注 */
-        if(recs[q].t===a[j].t && (!recs[q].lot || recs[q].lot===S.lot)){
-          recs[q].bought=1; recs[q].chk=0;
-        }
+      /* 标记已买即归档：选号记录只保存已购买的注 */
+      archiveBought(S.lot, a[j]);
       break;
     }
   }
-  saveBets(a); saveRecs(recs); S.cart=[]; pendClear();
+  saveBets(a); S.cart=[]; pendClear();
   closeHelp(); render();
-  toast(n ? ('已标记 '+n+' 注为已购买') : '这些注之前已经标记过了');
+  toast(n ? ('已标记 '+n+' 注为已购买，并归档到选号记录') : '这些注之前已经标记过了');
 }
 
-/* ================= ④ 重复 / 相似提醒 =================
+/* ================= 重复 / 相似提醒 =================
    守号的人常改两个数又存一遍，等于重复花钱买几乎同一组号 */
 function isPosLot(lot){ var d=D[lot]; return !!(d && d.positional); }
 function sameCount(a,b){
@@ -4068,7 +4220,7 @@ function simSay(sm){
 }
 function redLabelOf(){ var d=D[S.lot]; return d? d.redLabel : '号码'; }
 
-/* ═══════ ⑦ 我的选号：拆成「选号盘 / 操作区 / 卡片列表」三块 ═══════
+/* ═══════ 我的选号：拆成「选号盘 / 操作区 / 卡片列表」三块 ═══════
    原来 109 行全挤在一个函数里，改任何一小段都要在长函数中定位。
    现在每块一个函数，renderMine 只负责拼装。 */
 function minePickPad(d){
@@ -4103,17 +4255,18 @@ function renderMine(){
    +'<button class="'+(c.ok?'p':'dis')+'" onclick="addBet()">添加</button>'
    +'<button onclick="randPick()">随机一注</button>'
    +'<button class="g" onclick="clearPick()">清空选择</button>'
-   +'<button class="g" onclick="S.genOpen=!S.genOpen;render()">条件机选 '+(S.genOpen?'▴':'▾')+'</button>'
    +favBtnCur()
    +'</div>';
-  if(S.genOpen) h+=renderGen();
+  h+='<div class="note" style="margin:8px 12px 0">生成号码请到<b>「猜号参考」</b>：'
+   +'可指定蓝球 / 后区、近 N 期避重与形态约束，每注点「存入」即回到本页。'
+   +'<button class="mini" style="margin-left:8px" onclick="guessGo()">去生成号码 →</button></div>';
   h+='</div>';
 
   h+='<div class="sec">已保存 '+bets.length+' 注'
    +(bets.length?'<span style="float:right;font-weight:400;color:#c33;cursor:pointer" onclick="clearBets()">清空</span>':'')+'</div>';
-  /* ④ 重复 / 相似提醒：添加后短暂显示 */
+  /* 重复 / 相似提醒：添加后短暂显示 */
   if(S.simMsg) h+='<div class="simwarn">⚠️ '+esc(S.simMsg)+'</div>';
-  /* ① 勾选要买的注入口 */
+  /* 勾选要买的注入口 */
   if(bets.length){
     var cl=cartList();
     h+='<div class="cartbox"><div class="cbhd"><span>已勾选 <b>'+cl.length+'</b> 注'
@@ -4125,7 +4278,7 @@ function renderMine(){
       +'<button class="p" onclick="showBetImage()">生成投注图片</button></div></div>';
   }
   if(!bets.length)
-    h+='<div class="empty">还没有自选号码<br><span style="font-size:12px">在上面选择号码后点「添加」，或点「随机一注」</span></div>';
+    h+='<div class="empty">还没有自选号码<br><span style="font-size:12px">在上面选好号码后点「添加」；点「随机一注」会先填好，再点「添加」才会保存</span></div>';
   /* 全部操作：复制 / 生成图片 */
   if(bets.length)
     h+='<div class="betops" style="margin:8px 12px 0">'
@@ -4151,19 +4304,19 @@ function renderMine(){
   for(var b=0;b<bets.length;b++){
     var bet=bets[b], r={2:bet.r,3:bet.b}, a=analyze(bet.r,bet.b);
     h+='<div class="betcard"><div class="bettop"><div>'+fmtBalls(r,true)+'</div></div>'
-      /* ① 勾选这回要买的注（已买过的就不必再勾了） */
+      /* 勾选这回要买的注（已买过的就不必再勾了） */
       +(bet.bought?'':'<label class="cartchk"><input type="checkbox" '
         +(cartHas(bet)?'checked':'')+' onchange="cartToggleAt('+b+')">'
         +'加入这次要买的</label>')
       +'<div style="font-size:12px;color:#666;margin-top:6px">和值 '+sumRed(r)+' · 奇偶比 '+oddStr(r)
       +(rbOverlap(r)?' · <span style="color:#c33">'+d.blueLabel+'与'+d.redLabel+'有重合</span>':'')+'</div>';
-    /* ① 自动核对结果 */
+    /* 自动核对结果 */
     h+=betResHtml(bet);
-    /* ①-2 购买状态 */
+    /* -2 购买状态 */
     var isB2=bet.bought?1:0;
     h+='<div style="margin-top:6px"><span class="buyflag '+(isB2?'on':'')+'">'
       +(isB2?'✅ 已购买':'⚪ 未购买')+'</span></div>';
-    /* ② 复制 / 图片 */
+    /* 复制 / 图片 */
     h+='<div class="betops">'
       +'<button onclick="copyBet('+b+')">复制这注</button>'
       +'<button onclick="showBetImage()">生成图片</button>'
@@ -4188,13 +4341,10 @@ function renderMine(){
 /* ---------- 侧边栏 ---------- */
 function openSide(){ $('side').className='sidemask on'; }
 function closeSide(){ $('side').className='sidemask'; }
-/* ================= 云端自动更新 =================
-   页面不提供手动更新入口：开奖数据由云端工作流定时抓取官方接口
-   （经境内云函数转发），抓取后重新构建并自动发布到 GitHub Pages。
-   打开本页即是最新数据，浏览器端不发起任何取数请求。
-   PX_BUILTIN 由构建期注入，仅用于「数据来源」里显示通道状态，不参与取数。 */
+/* ================= 数据加载 =================
+   开奖数据由构建流程写入本页，打开时不发起取数请求。
+   PX_BUILTIN 由构建期注入并留在产物中，页面不读取。 */
 var PX_BUILTIN='@@PX_BUILTIN@@';
-function pxBuiltin(){ return (typeof PX_BUILTIN==='string' && PX_BUILTIN.indexOf('@@')!==0 && PX_BUILTIN.indexOf('http')===0)?PX_BUILTIN:''; }
 function clearMyBets(){
   closeSide(); saveBets([]); if(S.tab==='mine') render();
 }
@@ -4241,308 +4391,127 @@ function licShowInfo(){
 function showSource(){
   var d=D[S.lot];
   modalPanel('数据来源',
-   +'<h4>双色球</h4><p>中国福利彩票发行管理中心官方接口（cwl.gov.cn）。</p>'
-   +'<h4>大乐透</h4><p>中国体育彩票官方接口（lottery.sporttery.cn）。</p>'
+    '<h4>开奖结果</h4><p>中国福利彩票发行管理中心（双色球 / 福彩3D）、中国体育彩票（大乐透 / 排列三）的官方开奖结果。</p>'
    +'<h4>当前数据</h4><p>'+(d? esc(d.name)+'：'+d.rows.length+' 期（'+d.rows[0][0]+' ~ '+d.rows[d.rows.length-1][0]+'）'
-     :'尚未加载')+'</p>'
-   +'<h4>自动更新</h4><p>开奖数据由云端工作流按开奖日定时抓取，官方请求经<b>境内云函数</b>转发；抓取后自动重新构建并发布本页。'
-   +'页面内<b>没有手动更新入口</b>，也不需要配置任何地址；打开即是最新数据。若页面没变化，强制刷新一次（Ctrl+F5）即可。</p>'
-   +'<h4>说明</h4><p>开奖数据在构建时写入文件，打开即用、无需联网，数据源为官方接口。'
-   +'云端抓取通道：'+((typeof pxBuiltin==='function'&&pxBuiltin())?'<b style="color:#1a9c46">已配置</b>':'未在本文件内置')+'（仅影响服务端抓取，不影响阅读）。</p>'
-   +'</div></div>');
+     :'尚未加载')+'</p>');
 }
 
 /* ---------- 功能说明 ---------- */
 var HELP_SEEN='lotteryHelpSeen';
-/* ① 功能说明拆成章节数组：原来 showHelp 是一个 300+ 行的巨型字符串拼接，
-   改一个字要在字面量里找位置。现在每个章节独立成项，维护时只改对应那一条。 */
+/* 功能说明按章节维护：每项独立成条，改文案只动对应那一项。 */
 var HELP_SECTIONS=[
-  {t:'数据更新', b:
-   '<p>开奖数据<b>由云端自动更新</b>，页面里<b>没有</b>手动更新按钮，也不需要你配置任何地址。云端工作流按各彩种开奖日定时运行：'
-   +'抓取官方接口 → 与仓库已有数据合并 → 重新生成页面 → 自动发布到本站。你只要<b>打开页面</b>就是最新数据。</p>'
-   +'<p><b>为什么走云函数</b>：自动抓取用的服务器出口 IP 在境外，会被彩票站按段风控（403 / 567）；'
-   +'因此官方请求统一经一个<b>境内云函数</b>转发，地址作为仓库的 Secret 在构建期注入，<b>不出现在页面的配置界面里</b>。</p>'
-   +'<p><b>怎么判断新旧</b>：页面顶部常驻显示<b>数据更新于</b>（即构建时刻）与最新一期摘要。'
-   +'如果长时间没变，先按 <b>Ctrl+F5</b> 强制刷新（Service Worker 会缓存旧页面）；仍不变再看仓库的定时工作流是否跑成功。</p>'
-   +'<p>每次只补齐新增期，不会改写历史数据；页面数据整体由构建产物提供，不依赖设备本机缓存。</p>'
+  {t:'页签一览', b:
+   '<p>顶部共 <b>10 个页签</b>（最左「菜单」除外）：<b>开奖历史</b>、<b>号码统计</b>、<b>区间分布</b>、<b>蓝球分析</b>、'
+   +'<b>奖池走势</b>、<b>我的选号</b>、<b>我的收藏</b>、<b>中奖核对</b>、<b>复式/胆拖</b>、<b>猜号参考</b>。</p>'
+   +'<ul><li><b>开奖历史</b>含<b>表格 / 走势图</b>两个视图；<b>号码统计</b>含<b>出现次数 / 冷热分布 / 遗漏排行</b>三个视图</li>'
+   +'<li><b>我的选号</b>上半是选号区，下半是已保存记录</li>'
+   +'<li>切到<b>福彩3D / 排列三</b>时，<b>蓝球分析</b>与<b>奖池走势</b>自动隐藏，剩 <b>8 个</b></li></ul>'
   },
- {t:'数据', b:
-   '<p>开奖结果<b>实时</b>从官方接口抓取：双色球与福彩3D来自中国福彩网，大乐透与排列三来自中国体彩。首次打开稍慢，之后用缓存。顶部常驻显示<b>最新一期</b>'
-   +'摘要与数据更新时间。</p><p><b>四种玩法</b>：顶部标签切换。<b>双色球</b>（6 红 + 1 蓝，1-33 / 1-16）、<b>大乐透</b>（5 前'
-   +'区 + 2 后区，1-35 / 1-12）是「选号型」玩法，号码不重复、不分顺序；<b>福彩3D</b> 与 <b>排列三</b> 是「按位型」玩法，三位数字、每位 0'
-   +'-9、<b>可以重复且分顺序</b>（1 2 3 与 3 2 1 不是同一注）。按位玩法的页面会换成对应版本（走势改按位折线、统计改按位统计）。</p>'
+ {t:'四种玩法', b:
+   '<ul><li><b>双色球</b>：6 红（1-33）＋1 蓝（1-16）</li>'
+   +'<li><b>大乐透</b>：5 前区（1-35）＋2 后区（1-12）</li>'
+   +'<li><b>福彩3D / 排列三</b>：三位数字，每位 0-9，<b>可重复、分顺序</b>（123 与 321 不是同一注）</li>'
+   +'<li>选号型玩法不分顺序，按位玩法分顺序；切换后页面自动换成对应版本</li></ul>'
   },
- {t:'页签一览', b:
-   '<p>顶部标签栏从左到右共 <b>11 个页签</b>（最左侧「菜单」除外）：<b>开奖历史</b>、<b>号码统计</b>、<b>区间分布</'
-   +'b>、<b>蓝球分析</b>、<b>奖池走势</b>、<b>我的选号</b>、<b>我的收藏</b>、<b>中奖核对</b>、<b>复式/胆拖</b>、<b>数据自检</b>、<b>猜号参考</b></p><ul><'
-   +'li><b>开奖历史</b>内有两种视图：<b>表格</b>与<b>走势图</b>（原「开奖记录」「号码走势」两个页签已合并）</li>'
-   +'<li><b>号码统计</b>内有三种视图：<b>出现次数</b>、<b>冷热分布</b>、<b>遗漏排行</b>（原「出现次数」「冷热分布」已合并）</li>'
-   +'<li>切到<b>福彩3D / 排列三</b>时，<b>蓝球分析</b>与<b>奖池走势</b>会<b>自动隐藏</b>（按位玩法没有蓝球、固定奖金没有奖池），页签变为 '
-   +'<b>9 个</b></li><li><b>我的选号</b>页签内部是两段：<b>上半是选号区</b>，<b>下半是已保存记录</b>（原「我的选号记录」已并入，不再是'
-   +'独立页签）</li></ul>'
+ {t:'开奖历史', b:
+   '<ul><li><b>表格视图</b>：期号 / 日期 / 号码 / 奇偶比 / 和值；点表头排序，搜索框可按期号或日期过滤</li>'
+   +'<li>默认 60 期，「加载更多」每次加 60 期，最多 600 期；<b>黄底行</b>＝该期红蓝号有重合</li>'
+   +'<li><b>走势视图</b>：号码分布图（红球在左、蓝球在右）＋<b>和值走势</b>（折线、全史均值线、最新值）；默认 20 期，最多 200 期</li>'
+   +'<li><b>单号统计</b>：选号码与范围，看几期没出、历史与所选范围出现次数、平均间隔、最近开出日期</li>'
+   +'<li>按位玩法改为<b>百 / 十 / 个位折线</b>，和值取三位之和；表格多出<b>形态</b>与<b>跨度</b>两列</li></ul>'
   },
- {t:'开奖记录', b:
-   '<ul><li>五列：<b>期号 / 开奖日期 / 开奖号码 / 奇偶比 / 和值</b></li><li>默认按<b>期号降序 ▼</b>（最新在最上）；福彩3D /'
-   +' 排列三默认按<b>开奖日期降序</b>。点击任意表头切换排序字段，再点一次切换升▲降▼；当前排序列标红并显示箭头</li><li><b>黄底行</b>＝该期蓝球（后区'
-   +'）与红球（前区）号码有重合</li><li><b>搜索框</b>：输入期号或日期即时过滤（如 <b>2026122</b> 或 <b>2026-10-25</b>），支'
-   +'持不完整期号；点「清除」恢复全部</li><li>默认显示 60 期，点「加载更多」每次加 60 期，<b>最多 600 期</b>；翻多后出现<b>「↑ 回到最新 6'
-   +'0 期」</b>。要查更早的期号请用搜索框</li></ul>'
-  },
- {t:'号码走势', b:
-   '<ul><li><b>历史号码分布</b>：左侧分两行＝<b>期号</b>（与开奖记录完全一致）+ <b>开奖日期</b>（含年份）；右侧列＝号码。彩色圆点＝该期开出的'
-   +'号码（圆点内写号码，颜色与号码一致），空白＝未开出</li><li><b>红球与蓝球画在同一个图里</b>：左边彩点＝红球 1~33（或 1~35），右边蓝点＝<b>蓝'
-   +'球</b> 1~16（或 1~12），中间一条竖线为分界；每一行的蓝点就是<b>当期</b>开出的蓝球</li><li>默认显示最新 <b>20 期</b>，点「加载更'
-   +'多」每次加 20 期，<b>最多 200 期</b>；翻多后出现<b>「↑ 回到最新 20 期」</b>，展开后可点<b>「收起」</b>回到 20 期。33 列较宽，'
-   +'窄屏可左右滑动</li><li><b>单号统计</b>：先选号码，再选范围（<b>近一个月 / 近一年 / 全部</b>）。三大指标＝<b>几期没出</b> / 历史出'
-   +'现次数 / 所选范围出现次数；明细含平均间隔、当前遗漏、最长遗漏、<b>最近一次开出日期（年月日）</b>、所选范围出现次数</li></ul>'
-  },
- {t:'号码统计（出现次数 / 冷热分布 / 遗漏排行）', b:
-   '<ul><li>三者是<b>同一批数据的三种看法</b>，合并为一个页签，顶部三个按钮切换：<b>出现次数</b>（表格）／<b>冷热分布</b>（色块）／<b>遗漏排'
-   +'行</b>（按当前遗漏降序）</li><li>窗口下拉（近一个月 / 近一年 / 全部历史）<b>三种视图共用</b>，切换视图不会重置窗口</li><li>这里只统计'
-   +'<b>红球（前区）</b>；<b>蓝球／后区</b>统一在「<b>蓝球分析</b>」页，页面底部有跳转按钮</li><li><b>窗口</b>可切 <b>近一个月 / '
-   +'近一年 / 全部历史</b>，切换后两个区的次数与占比<b>立即随之变化</b>；当前窗口的期数显示在下拉框右侧</li><li>默认按<b>出现次数升序 ▲</b>；'
-   +'点击表头（号码 / 出现次数 / 占比%）切换排序字段与升降序，两个区独立排序</li><li>福彩3D / 排列三为<b>按位统计</b>（百位、十位、个位各 0-9'
-   +'），三个位各自独立排序，操作方式与双色球一致</li></ul>'
-  },
- {t:'号码统计 · 冷热分布视图', b:
-   '<ul><li>「号码统计」页切到<b>冷热分布</b>视图即可看到；<b>它不是独立页签</b></li><li>用<b>颜色方格</b>展示：格内为「号码 / 该窗'
-   +'口出现次数」</li><li>五级配色：<b>极冷 → 偏冷 → 正常 → 偏热 → 极热</b>，按偏离理论次数的标准差判定</li><li>窗口可切<b>近一个月 '
-   +'/ 近一年 / 全部历史</b>，当前窗口的期数显示在下拉框右侧</li><li>下方直接列出<b>最热 3 个</b>与<b>最冷 3 个</b>；可按号码或冷热排序'
-   +'</li><li>窗口越短样本越少，冷热波动越大——同一号码在不同窗口下的冷热可能完全不同</li><li>福彩3D / 排列三按<b>百位、十位、个位</b>分别展示'
-   +'，每位各有最热 / 最冷前 3，同样可切换「按号码 / 按冷热」</li></ul>'
-  },
- {t:'号码统计 · 遗漏排行视图', b:
-   '<ul><li>「号码统计」页切到<b>遗漏排行</b>视图即可看到；<b>它不是独立页签</b></li><li>按<b>当前遗漏降序</b>列出：该号码距上一次开出'
-   +'已<b>连续多少期没出</b>，并标注最近一次开出的日期</li><li>可切<b>前 10 个 / 前 20 个 / 全部</b>；这里<b>只列红球（前区）</b>'
-   +'——蓝球 / 后区请到<b>「蓝球分析」</b>页看；福彩3D / 排列三按百位、十位、个位分别列</li><li>遗漏 <b>≥30 期</b>的数字会标红；从未开出'
-   +'过的显示「从未开出」</li><li>⚠️ 遗漏再大也不会"补偿性"开出，追冷号是最容易花大钱的做法</li></ul>'
-  },
- {t:'历史比对（最相近的开奖）', b:
-   '<ul><li>「我的选号」每注下方点<b>「历史比对」</b>，在<b>全部历史</b>里找出与这注最接近的期</li><li>最多列出 <b>10 期</b>，每行'
-   +'给出<b>期号、开奖日期、开奖号码</b>和吻合情况</li><li>开奖号码中<b>金色描边</b>的＝与你这注相同的号码，灰色的＝没对上</li><li>排序：吻合'
-   +'个数多的排前面；个数相同时，双色球 / 大乐透看蓝球是否也中，福彩3D / 排列三看"错序"（三个数字对上但位置不同）</li><li>⚠️ 这只是<b>历史比对</b'
-   +'>，用来看看这注号码在历史上最接近的样子。每期开奖都是独立事件，<b>没有任何预测能力</b></li></ul>'
+ {t:'号码统计', b:
+   '<ul><li>三个视图：<b>出现次数</b>（表格）、<b>冷热分布</b>（色块）、<b>遗漏排行</b>（按当前遗漏降序），窗口下拉三者共用</li>'
+   +'<li>只统计<b>红球（前区）</b>；蓝球 / 后区请看<b>蓝球分析</b>页</li>'
+   +'<li>窗口可选近一个月 / 近一年 / 全部历史；点表头切换排序</li>'
+   +'<li>遗漏 ≥30 期标红；<b>遗漏再大也不会「补偿性」开出</b></li>'
+   +'<li>按位玩法按<b>百 / 十 / 个位</b>分别统计</li></ul>'
   },
  {t:'区间分布', b:
-   '<ul><li><b>独立页签</b>。双色球按 <b>1-11 / 12-22 / 23-33</b> 分三区，大乐透按 <b>1-12 / 13-24 / 25-3'
-   +'5</b>；福彩3D / 排列三每位只有 0-9，按 <b>小区 0-4 / 大区 5-9</b> 分两区</li><li>上方表格给出各区<b>出现次数、占比、每期平'
-   +'均个数</b>，并列出<b>理论分布</b>方便对照</li><li>下方是<b>最近 20 期</b>的堆叠条：一期一条，彩色段长度＝该区出了几个号，右侧标出当期总数'
-   +'</li><li>窗口可选<b>近一个月 / 近一年 / 全部历史</b>（本页独立设置）</li><li>⚠️ 实际分布与理论有偏差属于<b>正常随机波动</b>，不'
-   +'会"补回来"</li></ul>'
+   '<ul><li>双色球按 1-11 / 12-22 / 23-33，大乐透按 1-12 / 13-24 / 25-35；按位玩法每位分 0-4 / 5-9 两区</li>'
+   +'<li>上方表格给出各区次数、占比、每期平均个数与理论分布；下方是最近 20 期堆叠条</li>'
+   +'<li>窗口独立设置；实际分布与理论有偏差属正常随机波动</li></ul>'
   },
- {t:'蓝球 / 后区独立分析', b:
-   '<ul><li>把<b>蓝球（大乐透为后区）</b>单独成页，不用再在走势图里横向滑动查找</li><li>顶部四张卡：<b>开出个数</b>、<b>最热号码</b>、'
-   +'<b>当前遗漏最久</b>、<b>历史最大遗漏</b></li><li>中部三档遗漏条：<b>冷区（遗漏最长）/ 温区 / 热区</b>，每个号码下方数字为当前遗漏期数'
-   +'</li><li>下方完整表格：<b>号码 · 出现次数 · 占比 · 当前遗漏 · 最大遗漏 · 平均间隔 · 上次开出日期</b></li><li><b>当前遗漏<'
-   +'/b>＝距上次开出已连续多少期没出；<b>平均间隔</b>＝总期数 ÷ 出现次数，越小越频繁</li><li><b>点表头可切换排序</b>（按号码 / 出现次数 / '
-   +'当前遗漏 / 最大遗漏）；窗口可选<b>近一个月 / 近一年 / 全部历史</b></li><li>福彩3D / 排列三是<b>按位玩法、没有蓝球</b>，切到这两个彩'
-   +'种时该页签会<b>自动隐藏</b>，不用再点进去看空页面</li></ul>'
+ {t:'蓝球 / 后区分析', b:
+   '<ul><li>汇总卡、<b>冷 / 温 / 热三档</b>与完整表格；三档里大字是号码，'
+   +'彩色胶囊是<b>当前遗漏期数</b>，下方小字是<b>累计出现次数</b></li>'
+   +'<li><b>点表头加排序条件</b>，再点切升↑降↓，点 × 取消（最多 3 项）</li>'
+   +'<li>各条件<b>等权综合打分</b>：如「出现次数↑＋当前遗漏↓」，次数少且遗漏久的号排最前</li></ul>'
   },
- {t:'奖池 / 销量走势', b:
-   '<ul><li>顶部<b>「奖池走势」</b>页签。上方三张卡：<b>奖池金额、当期销量、一等奖单注奖金</b></li><li>中间折线图可切三个指标：<b>奖池 /'
-   +' 销量 / 一等奖</b>，鼠标（或手指）滑动可左右查看更长序列</li><li>下方是<b>最近 20 期明细表</b>（期号、日期、奖池、销量、一等奖）</li><'
-   +'li>数据取自官方接口每期的奖池字段，双色球保留<b>最近 120 期</b>、大乐透<b>最近 100 期</b>；云端重新构建后会跟着更新</li><li>⚠️'
-   +' 福彩3D / 排列三是<b>固定奖金玩法、没有奖池</b>，切到这两个彩种时该页签会<b>自动隐藏</b></li><li>一等奖是<b>浮动奖</b>，金额随中奖注'
-   +'数和奖池变化；奖池高低与中奖概率<b>无关</b></li></ul>'
+ {t:'奖池走势', b:
+   '<ul><li>三张卡：奖池金额、当期销量、一等奖单注奖金；折线图可切三个指标</li>'
+   +'<li>下方是最近 20 期明细；一等奖为浮动奖，奖池高低与中奖概率无关</li>'
+   +'<li>福彩3D / 排列三是固定奖金玩法，页签自动隐藏</li></ul>'
   },
  {t:'我的选号', b:
-   '<ul><li>点选号码或「随机一注」添加，<b>添加前实时校验</b>并提示：缺球、多选、组合重复会拦截（按钮置灰）；蓝球与红球重合会提醒（允许添加）</li><li'
-   +'>每注显示：<b>和值、奇偶比</b>、是否历史开出过、<b>全史最相近</b>（期号 + 日期 + 重合了哪几个号）</li><li>号码存在<b>本机浏览器</b>'
-   +'，不会上传；可在菜单中清除</li><li><b>重复 / 相似提醒</b>：添加时若与已有的一注<b>完全相同</b>会被拦下（提示已保存过，不重复添加）；若<b>高'
-   +'度相似</b>（如红球只差 1 个）则允许添加，但会黄条提醒——避免花两份钱买几乎同一组号</li><li><b>生成投注图片</b>：勾上这回要买的注 →「生成投注图'
-   +'片」，得到一张大字号图片（含合计金额），可<b>长按保存 / 转发 / 下载</b>；没勾任何注时按<b>全部</b>生成，买完可一键<b>标记全部已买</b></li'
-   +'><li><b>条件机选</b>（点「条件机选 ▾」展开）：按 <b>和值区间</b>（偏低/居中/偏高）、<b>奇偶比</b>、<b>大小比</b>、<b>三区比</'
-   +'b> 筛选后随机生成</li><li><b>生成注数</b>可选 <b>1~5</b>：选 <b>1</b> 时结果填入上方选号区（可再手动调整）；选 <b>2~5</'
-   +'b> 时生成的多注互不重复，<b>直接加入下方已保存列表</b></li><li>条件过严凑不出时会提示，放宽即可</li><li><b>手输 / 粘贴号码</b>：选'
-   +'号区下方有输入框，微信收到的号码<b>整条粘进来</b>即可，不必逐个点球。支持 <b>02 11 13 14 16 26 + 01</b>、<b>02,11,13,1'
-   +'4,16,26,01</b>、<b>2 11 13 14 16 26+1</b>、<b>02111314162601</b>（连写）等写法，回车即可解析</li><li'
-   +'>三个按钮：<b>解析并填入</b>（填进选号区，可再改）、<b>解析并保存</b>、<b>解析并收藏</b>（直接进「我的收藏」）</li><li>会自动<b>补零对'
-   +'齐</b>并校验范围；号码个数不对、越界、重复都会给出具体提示</li><li><b>自动对奖</b>：每注都<b>自动与最新一期比对</b>，直接显示「🎉 几等奖 ·'
-   +' 多少元」或「未中奖」；如果这注是在最新一期开奖<b>之后</b>才存的，会显示「⏳ 待开奖」</li><li>列表顶部有<b>中奖汇总</b>：几注中奖、固定奖共多少'
-   +'元、几注待开奖，以及<b>已买 / 未买</b>各多少注</li><li><b>我的收藏</b>：选好号码后点<b>「收藏当前」</b>，或从已保存的注下方点<b>「收'
-   +'藏」</b>，在弹出框里起个名字（生日、纪念日、车牌号）存下来。下次点<b>「载入」</b>一键填回选号区，不用重新点一遍球。可<b>改名 / 删除</b>（删除需点两'
-   +'次确认）</li><li><b>「我的收藏」页</b>：顶部页签，把<b>四个彩种的全部收藏汇总</b>在一屏里，可按彩种筛选。每条可<b>载入 / 改名 / 复制 /'
-   +' 删除</b>；点「载入」会自动切到该彩种并把号码填进选号区，点「复制」可直接发给别人</li><li><b>守号追踪</b>：收藏的号码点<b>「追踪」</b>，查看'
-   +'这注<b>守了多少期</b>、期间<b>中过几次</b>、<b>最好一次</b>中了多少（含期号和日期）、守号期间每个号码各开出几次，以及<b>最近 12 期</b>每'
-   +'期命中几个（<b>红色</b>表示当期中奖）。统计从<b>收藏当天</b>算起，只统计期数和奖级次数，<b>不涉及金额</b></li><li><b>二维码同步</b>'
-   +'：点<b>「生成二维码」</b>把四个彩种的收藏编成一张二维码，另一台手机用微信或系统相机<b>扫一扫</b>，把扫出来的文本粘进<b>「扫码导入」</b>即可，导入是'
-   +'<b>合并去重</b>，已有号码不会重复。也可以点<b>「复制同步文本」</b>直接发过去。全程在本机完成，<b>不需要服务器</b>；收藏多到二维码装不下时，请改用「'
-   +'备份」导出 txt</li><li>收藏存在<b>本机浏览器</b>，<b>备份时会一并导出</b>，恢复时一并导回；换浏览器或清理数据会丢失，建议定期备份</li><'
-   +'li>删除<b>「我的选号」</b>里的某一注、或删除<b>下半部分记录</b>里的某条时，如果这注已经收藏过，会<b>自动取消收藏</b>，避免「我的收藏」里残留已经'
-   +'删掉的号码；点<b>「清空」</b>会一次性解除其中已收藏的那些</li><li><b>已购买 / 未购买</b>：添加时默认「⚪ 未购买」（因为选号不等于真的买了），'
-   +'真买了点<b>「标记为已买」</b>改成「✅ 已购买」——<b>单向操作，不能改回</b>，避免误改导致对账不准；这里改了会<b>自动同步</b>到下半部分记录里的同一'
-   +'条</li><li>选号保存在<b>本机浏览器</b>里，换设备或清理浏览器数据会丢失；每次添加都会<b>自动归档到本页下半部分的记录区</b>，那里长期保留</li>'
-   +'<li><b>复制文本</b>：每注下方「复制这注」生成 <b>01 02 04 17 19 30 + 09</b> 格式；顶部「复制全部文本」一次复制所有注</li>'
-   +'<li><b>生成投注图片</b>见下方独立章节</li></ul>'
+   '<ul><li>点选号码或「随机一注」添加；缺球、多选、重复会拦截。每注显示和值、奇偶比与自动对奖结果</li>'
+   +'<li><b>手输 / 粘贴</b>：整条号码粘进输入框即可解析，支持空格、逗号、连写等写法，可填入、保存或收藏</li>'
+   +'<li><b>生成号码</b>请到「猜号参考」，可指定蓝球 / 后区、近 N 期避重；每注点「存入」即回到本页</li>'
+   +'<li><b>生成投注图片</b>：勾选要买的注生成大字号图片，可保存 / 转发 / 下载，买完一键标记已买</li>'
+   +'<li><b>下半部分记录</b>：只保存<b>已购买</b>的注，点「标记为已买」后自动归档，可按彩种 / 开奖状态 / 日期筛选，最多 500 条</li>'
+   +'<li><b>批量核对</b>：一键比对当前筛选记录，可选购买当期 / 最新一期 / 指定期号；几期前买的票务必用购买当期</li>'
+   +'<li>待核对的注会在页签上显示红色角标，点「立即核对」清零</li>'
+   +'<li><b>已购买</b>为单向操作，标记后不能改回；号码只存在本机浏览器</li></ul>'
   },
- {t:'我的选号 · 下半部分（已保存记录）', b:
-   '<ul><li>在「<b>我的选号</b>」页签<b>下半部分</b>（选号区之后），不再是独立页签</li><li>每次在「我的选号」里添加的号码，都会<b>自动归档'
-   +'</b>到这里并长期保留；清空「我的选号」<b>不会影响</b>这里的记录</li><li>每条记录显示<b>彩种、号码、保存时间</b>，以及相对该彩种最新一期的<b'
-   +'>对奖结果</b>（中奖 / 未中奖 / 待开奖）</li><li>按时间倒序排列，顶部汇总「共多少条、几注曾中奖、几注待开奖」</li><li><b>只显示「已购买」'
-   +'</b>的记录——没买的不进这个列表，所以它相当于「我买过的号」档案</li><li><b>筛选</b>：可按 <b>彩种</b>（双色球/大乐透/福彩3D/排列三）、'
-   +'<b>开奖状态</b>（待开奖 / 已开奖）以及 <b>日期区间</b> 组合筛选；汇总会跟着筛选结果变化，点「清除筛选」恢复</li><li>最多保留 <b>500 '
-   +'条</b>，超出会丢弃最早的；只存在本机浏览器，不会上传</li><li>每条下方有<b>「删除」</b>按钮，点一下变成<b>「确认删除」</b>再点才真删（旁边有取'
-   +'消）；顶部「清空全部记录」一次性删除全部</li><li><b>选号不等于购买</b>：添加号码只是选号，不代表真的去买了。真的买了请在「我的选号」里点<b>「标记为已'
-   +'买」</b>改成「✅ 已购买」，<b>标记后不能改回</b></li></ul>'
-  },
- {t:'生成投注图片', b:
-   '<ul><li>在「我的选号」里勾上<b>这回要买</b>的注，点<b>「生成投注图片」</b></li><li>图片用<b>大字号</b>画出每一注，顶部写明<b>共'
-   +'几注、合计多少元</b>，手机上<b>长按可保存或转发</b>，也可以<b>下载</b>下来给店主看</li><li>没勾选任何注时，按<b>全部注</b>生成</li'
-   +'><li>买完点<b>「标记全部已买」</b>，一次把这些注都标成已购买</li><li>已购买过的不再显示勾选框，避免重复买</li></ul>'
-  },
- {t:'待核对提醒', b:
-   '<ul><li>买了、那期也开了、但<b>自己还没对过</b>的注，「<b>我的选号</b>」页签上会显示<b>红色数字角标</b></li><li>记录区顶部也会出现'
-   +'提醒条，点<b>「立即核对」</b>一次对完，角标随之清零</li><li>只在<b>主动核对</b>后才算已核对——一进页面看到结果不算，否则提醒永远不会出现</li'
-   +'></ul>'
-  },
- {t:'批量核对（可指定期号）', b:
-   '<ul><li>在「我的选号」页<b>下半部分的记录区</b>点<b>「批量核对」</b>，一键把<b>当前筛选出的记录</b>跟开奖号码比对，不必逐注手选号码</li'
-   +'><li><b>三种口径</b>：<b>购买当期</b>（默认，最准：买的那期开什么号就对什么号）、<b>最新一期</b>、<b>指定期号</b>（每个彩种各自选，可只'
-   +'核对某几期）</li><li>几期前买的票请务必用<b>购买当期</b>——拿今天的开奖号去对，结果是错的</li><li>结果按条列出：<b>中了几等奖、多少元</b'
-   +'>，未中奖和<b>待开奖</b>也会分别标出</li><li>顶部汇总「共核对几注、中奖几注、固定奖合计多少元」</li><li>福彩3D / 排列三按<b>直选 10'
-   +'40 / 组选三 346 / 组选六 173</b> 判定，与双色球、大乐透的奖级规则各自独立</li></ul>'
-  },
- {t:'备份 / 恢复（txt）', b:
-   '<ul><li>选号都存在<b>本机浏览器</b>里，清理缓存、换设备、换域名都会<b>全部丢失</b>，建议定期导出</li><li>⚠️ 只备份<b>已购买</b>'
-   +'的选号——未购买的只是临时草稿，不占用备份</li><li>点<b>「备份 / 恢复」→「导出备份（txt）」</b>，会下载一个 txt，可用记事本直接打开查看和编辑'
-   +'</li><li>恢复时选择该 txt，可<b>合并导入</b>（保留现有、只补不重复的）或<b>覆盖导入</b>（先清空再导入）</li><li>有记录且超过 <b>'
-   +'30 天</b>没备份时，记录页顶部会出现提醒条</li><li>备份里还包含<b>我的收藏</b>（彩种|名称|号码）。即使还没买过号，收藏的号码也会一起带走</li'
-   +'></ul>'
-  },
- {t:'添加到桌面（像 App 一样打开）', b:
-   '<ul><li>菜单 → <b>「添加到桌面」</b>，按里面的步骤操作，主屏幕会多一个图标，点开就是本页，不用每次翻收藏夹</li><li>通过 <b>https 网'
-   +'址</b>打开并加载过一次后，<b>断网也能看</b></li><li>⚠️ 需要用系统浏览器操作：<b>iPhone 用 Safari</b>（微信内置浏览器不支持）'
-   +'，安卓用 Chrome / Edge</li><li>⚠️ 直接双击本地 html 文件（file://）不支持安装，但双击打开本身就能离线看，不受影响</li></u'
-   +'l>'
-  },
- {t:'顶部时间', b:
-   '<ul><li><b>数据更新于</b>＝页面构建（抓取数据）的时刻，固定不变，可用来判断数据新旧</li><li><b>当前时间</b>＝你设备的实时时间，<b>每秒'
-   +'自动跳动</b>，无需刷新页面</li><li>数据超过 <b>3 天</b>没更新时，顶部会加一行<b>红色提醒</b>「数据已 N 天未更新」，提示手动刷新（自动抓'
-   +'取可能因网络原因失败）</li><li>用授权码激活后，这两行<b>上方</b>还会常驻一行「授权有效期至 …（还剩 N 天）」，剩余 <b>7 天以内会变红加粗</b'
-   +'>提醒；管理员登录时不显示</li></ul>'
-  },
- {t:'开奖倒计时', b:
-   '<ul><li>「最新一期」卡片下方显示<b>距下次开奖</b>的时间，每秒自更新</li><li>同时标注该彩种的<b>开奖日与时刻</b>：双色球 周二·周四·周日'
-   +' 21:15；大乐透 周一·周三·周六 20:30；福彩3D 每天 21:15；排列三 每天 21:25（均为北京时间）</li><li>倒计时归零后显示「开奖进行中」'
-   +'，官方数据通常几分钟后更新</li></ul>'
+ {t:'我的收藏与备份', b:
+   '<ul><li>选好后点<b>「收藏当前」</b>起名保存，下次「载入」一键填回；可改名 / 删除</li>'
+   +'<li><b>我的收藏</b>页汇总四个彩种，可按彩种筛选，支持载入 / 复制 / 改名 / 删除</li>'
+   +'<li><b>守号追踪</b>：看收藏后守了多少期、中过几次、最好一次成绩与最近 12 期命中情况</li>'
+   +'<li><b>二维码同步</b>：生成二维码给另一台手机扫码导入，合并去重；也可复制同步文本</li>'
+   +'<li><b>备份 / 恢复</b>：菜单导出 txt，可合并或覆盖导入；只备份已购买的选号与收藏，建议定期导出</li>'
+   +'<li>删除已收藏的注会<b>自动取消收藏</b>，避免收藏里残留已删掉的号码</li></ul>'
   },
  {t:'中奖核对', b:
-   '<ul><li>输入自己买的号，一键对奖。可选择对比<b>最新一期</b>或<b>指定期号</b></li><li>号码在上方号码盘<b>点选</b>填入，选满后自动出'
-   +'结果</li><li>结果直接显示<b>中几等奖</b>、奖金（固定奖显示金额，浮动奖标注以官方公告为准）、以及<b>命中的红球/蓝球</b></li><li>奖级按官'
-   +'方规则判定：<b>双色球</b>一至六等奖；<b>大乐透</b>一至九等奖</li><li>下方<b>「奖项说明」</b>列出完整奖级表：中球条件、奖级、奖金；一/二等'
-   +'奖为浮动奖，会显示<b>当期实际开出的单注奖金</b></li></ul>'
+   '<ul><li>点选号码，选<b>最新一期</b>或<b>指定期号</b>一键对奖，直接显示奖级、奖金与命中的球</li>'
+   +'<li>下方「奖项说明」列出完整奖级表；一 / 二等奖为浮动奖，显示当期实际单注奖金</li>'
+   +'<li>按位玩法按直选 1040 / 组选三 346 / 组选六 173 判定</li></ul>'
   },
  {t:'复式 / 胆拖', b:
-   '<ul><li><b>复式</b>：选出比单式更多的号码，自动覆盖这些号码的<b>所有组合</b>。比如双色球选 7 个红球 + 1 个蓝球 = C(7,6) = <b'
-   +'>7 注</b> = <b>14 元</b></li><li><b>胆拖</b>：<b>胆码</b>是每注都包含的号码，<b>拖码</b>用来补足剩余位置，比同等覆盖面'
-   +'的全复式省钱。比如 2 胆 + 5 拖 + 1 蓝 = C(5,4) = <b>5 注</b> = <b>10 元</b></li><li>顶部用<b>红色大字</b>'
-   +'标出<b>共几注、总共多少钱</b>——复式的金额会<b>随选号个数成倍增长</b>，付款前务必再核对一次</li><li>福彩3D / 排列三 为<b>直选复式</b'
-   +'>：每位各选多个数字，注数 = 百位个数 × 十位个数 × 个位个数</li><li><b>缩水过滤</b>：复式会把所有组合都买下来，里面难免混着「和值极端」「全奇全'
-   +'偶」这类你不想要的注。点<b>「开启缩水」</b>后设定条件，不符合的组合会被剔掉，<b>注数和金额同步下降</b>。双色球 / 大乐透可按<b>和值范围、奇数个数、大'
-   +'小比、最长连号、与上期重号个数</b>过滤；福彩3D / 排列三按<b>和值、跨度、形态</b>（豹子 / 组三 / 组六）过滤</li><li>缩水结果会清楚显示「缩'
-   +'水前 X 注 → 缩水后 Y 注」，并可<b>复制成文本</b>带给投注站。⚠️ 缩水不会提高中奖概率，只是<b>少买几注、少花点钱</b>，被剔掉的组合同样有开出的可'
-   +'能</li><li>⚠️ 复式与胆拖<b>只改变覆盖面，不改变中奖概率的数学期望</b>：花得越多覆盖的组合越多，但每一注的中奖概率完全相同</li></ul>'
-  },
- {t:'福彩3D / 排列三（按位玩法）', b:
-   '<ul><li><b>开奖记录</b>多两列：<b>形态</b>（豹子＝三位相同 / 组三＝有两个相同 / 组六＝三位各不相同）与<b>跨度</b>（最大数 − 最小数'
-   +'）</li><li><b>号码走势</b>改为按位折线：<b>百位 / 十位 / 个位</b>各一条线（纵轴 0-9），另加<b>和值走势</b>（0-27）；顶部可切'
-   +'换窗口：<b>近 10 期 / 近一个月 / 近三个月 / 近一年</b></li><li><b>开奖记录</b>默认按<b>开奖日期降序</b>（最新一期在最上面），'
-   +'点表头可切换排序</li><li><b>号码统计</b>（出现次数 / 冷热分布 / 遗漏排行）按位统计：每位 0-9 各出现多少次</li><li><b>我的选号</'
-   +'b>按位选号：每位各选一个 0-9；添加后自动与最新一期比对</li><li><b>中奖核对</b>判定三种奖级：<b>直选 1040 元</b>（三位数字与顺序完全相'
-   +'同）、<b>组选三 346 元</b>（数字相同、顺序不限，含两个相同数字）、<b>组选六 173 元</b>（数字相同、顺序不限，三个数字各不相同）</li><li>'
-   +'注意：按位玩法的号码<b>分顺序</b>，1 2 3 与 3 2 1 不是同一注</li></ul>'
-  },
- {t:'菜单（第一个标签页）', b:
-   '<p>点标签栏最左侧的<b>「菜单」</b>打开左侧抽屉：<b>功能说明</b>、<b>数据来源</b>、<b>添加到桌面</b>、<b>显示模式</b>（浅色 ↔ 深色）、'
-   +'<b>清除本机选号</b>。数据由云端定时抓取并自动发布，菜单里<b>没有</b>手动更新项。</p><p>若页面开启了<b>访问授权</b>，菜单里会多出一项「访问授权」：显示有效期、本机'
-   +'授权码，可<b>复制授权码</b>（复制出来是纯码，可直接粘贴到激活框）或<b>清除本机授权</b>。</p><p>管理员登录后，菜单会常驻多出一项<b>「生成授权码」'
-   +'</b>（签发授权码），并隐藏「访问授权」——管理员本人免激活，无需再显示。</p>'
-  },
- {t:'管理员与生成授权码', b:
-   '<ul><li>菜单里<b>「管理员」</b>项用账号登录后，菜单会常驻多出一项<b>「生成授权码」</b>——关掉弹窗也还在，随时能打开签发，不用重新登录。</li>'
-   +'<li><b>设备绑定码</b>：在生成面板填入对方的 4 位设备码，生成 16 位绑定码，只认那一台设备，换机器激活不了，全程离线不需联网。</li><li><b>通'
-   +'用码</b>（12 位，不填设备码）：任意设备都能激活。适合自己多台设备用，但管不住被转发——要一码一机请务必用绑定码。</li><li>签发时可按<b>天 / 周 /'
-   +' 月 / 年</b>设置有效期，一次生成 1~20 个，到期日实时预览，生成后可单个复制、复制全部或下载成名单。</li><li>管理员本人<b>免激活</b>，所以菜'
-   +'单里不再显示「访问授权」；退出登录后本机授权一并失效。</li><li><b>设备绑定码</b>：签发时在「设备绑定」里填入对方的 4 位设备码，生成的是 16 位码，'
-   +'<b>只认那一台设备</b>，换设备激活不了，全程不需要联网。</li><li>留空则生成 12 位<b>通用码</b>，任意设备都能用（适合自己多台设备）。</li>'
-   +'<li>新签的码<b>不用重新构建或上传页面</b>，直接发给对方就能激活；每个码自带到期日。</li></ul><p style="font-size:12px;co'
-   +'lor:#888">说明：签发和验证都在页面内完成，密钥也在 HTML 里。它拦得住随手转发，拦不住刻意破解；要真正不可伪造必须配后端。</p>'
-  },
- {t:'修改管理员密码', b:
-   '<ul><li>入口：管理员登录后，点菜单<b>「管理员」</b> → <b>「修改密码」</b>；「访问授权」面板里登录后也有同一入口。</li>'
-   +'<li>要填<b>原密码</b>、<b>新密码</b>和<b>确认新密码</b>。新密码至少 6 位、两次必须一致、不能和原密码相同；'
-   +'用户名是构建时固定的，<b>不能在这里改</b>。</li>'
-   +'<li><b>本机立即生效</b>：新密码只对当前这台设备、这个浏览器有效，当前登录状态保持不变；'
-   +'页面只保存密码散列，不保存明文。清除浏览器数据后这条记录会消失，回到页面内置密码。</li>'
-   +'<li><b>所有访客生效</b>：密码散列是构建时烤进 HTML 的，页面本身改不了它。改密成功页可下载 '
-   +'<b>license.json</b>（或复制完整配置）覆盖本地同名文件，也可以在本地执行 '
-   +'<b>python3 make_license.py --admin-pass 新密码</b>，然后重新运行 build_single.py / '
-   +'build_static.py 并推送仓库。不重建推送，Pages 上其他访客仍用旧密码。</li>'
-   +'<li>改密成功页会显示一次新密码明文，<b>刷新或关掉页面就不再显示</b>，可下载<b>账号备忘</b>留底；'
-   +'请把它和 <b>管理员账号.txt</b> 一样单独保存，别上传公开仓库。</li>'
-   +'<li>重新构建换了内置密码后，本机之前的改密记录会<b>自动作废</b>，以新的内置密码为准，不会两套密码打架。'
-   +'想放弃本机改密，可在修改密码面板点<b>「恢复页面内置密码」</b>。</li></ul>'
-   +'<p style="font-size:12px;color:#888">说明：这是纯前端校验，验证用的散列和算法都在 HTML 里，'
-   +'挡得住随手试密码，挡不住刻意扒源码；要真正不可绕过必须配后端鉴权。</p>'
-  },
- {t:'深色模式与宽屏', b:
-   '<ul><li>只有<b>浅色</b>和<b>深色</b>两种，默认<b>跟随时间自动切换</b>：每天 19:00 到次日 07:00 为深色，其余时间浅色，跨过时间'
-   +'点会自动换肤，不用手动管</li><li>点菜单里的<b>「显示模式」</b>可在 <b>浅色 ↔ 深色</b> 之间直接切换；切到的值与当前时段一致时会自动回到「跟随'
-   +'时间」</li><li>电脑宽屏下内容居中、字号加大，页签排成一行；手机保持单列</li><li>开奖数据会缓存在本机，第二次打开更快（数据有更新时自动替换）</li>'
-   +'</ul>'
+   '<ul><li><b>复式</b>自动覆盖所选号码的所有组合；<b>胆拖</b>用胆码＋拖码，比同等覆盖更省钱</li>'
+   +'<li>顶部用红字标出<b>共几注、多少钱</b>，付款前请再核对</li>'
+   +'<li><b>缩水过滤</b>：按和值、奇偶、大小比、连号、重号等条件剔除不想要的组合，注数与金额同步下降</li>'
+   +'<li>按位玩法为每位各选多个数字，注数＝三位的个数相乘</li>'
+   +'<li>⚠️ 复式与缩水只改变覆盖面，<b>不提高中奖概率</b></li></ul>'
   },
  {t:'猜号参考', b:
-   '<p style="border-left:3px solid #c33;padding-left:8px;background:rgba(200,60,60,.06)">'
-   +'<b>请先理解这一点</b>：彩票每期开奖都是<b>独立随机事件</b>，历史号码<b>无法推算</b>下期结果。'
-   +'本页<b>不是预测器</b>，而是「按历史形态生成号码 + 偏好回放」。</p>'
-   +'<ul><li><b>形态典型</b>（默认推荐）：不偏向冷热，只让号码落在<b>历史常见形态</b>范围内——'
-   +'和值、奇偶、连号、重号、跨度、区间都取自最近若干期的统计，页面顶部会列出这些范围</li>'
-   +'<li>也可选<b>追热 / 博冷 / 遗漏回补 / 趋均值 / 纯随机</b>，并用<b>「偏向」</b>控制强度（弱 / 中 / 强 / 极强）。'
-   +'追热与博冷口径严格对称（历史开出次数最多 / 最少）；<b>遗漏回补</b>用的是「当前遗漏最久」，'
-   +'它与「历史最冷」不是同一批号，所以两者的推荐结果也不同</li>'
-   +'<li><b>各注分散度</b>（低 / 中 / 高）：控制多注之间的号码岔开程度。'
-   +'机制是「已被前面注用过的号码降权」——软约束，比硬拒绝更稳，'
-   +'不会因为偏好开得强就频繁撞车而退化</li>'
-   +'<li><b>避免多注雷同</b>（默认开启）：生成多注时，任意两注的红球重合不超过设定值（默认 2 个），'
-   +'避免你花两份钱买到几乎同一组号。<b>这是本页唯一能真正帮你省钱的地方</b></li>'
-   +'<li><b>近 N 期避重</b>：「近 N 期」可选 3 / 5 / 10（默认 5 期），'
-   +'「最多重合」可选 1 / 2 / 3 个（默认 2 个）。<b>逐期（默认）</b>＝与近 N 期每一期分别比，'
-   +'任意一期重合都不超过 M 个；<b>严格避重（开关）</b>＝与近 N 期出现过的全部号码合计重合不超过 M 个，'
-   +'条件很紧，试不出来时会取「最接近的一注」并在分析里标红，不会卡住。<br>'
-   +'福彩3D / 排列三只有 10 个数字，严格模式改用「同位命中 ≤ 1 且不复制近 N 期任一期」，'
-   +'默认模式为同位命中 ≤ M 位，建议把 M 设为 1。<b>生成后会给出「N 注达标」的汇总</b></li>'
-   +'<li>需要知道的是：<b>号码之间的冷热差距本身就是随机噪声</b>。'
-   +'以双色球为例，33 个号码在 2000 多期里的出现次数集中在 330~430 次（理论均值 378），'
-   +'这个幅度完全落在二项分布的正常波动范围内，<b>挑不出真正更热或更冷的号</b>。'
-   +'把「偏向」开到极强确实能选出排名最极端的号，但那只是把噪声放大，不提高任何中奖概率</li>'
-   +'<li>每注下方显示该注的<b>形态参数</b>（和值 / 奇偶 / 连号 / 重号 / 跨度 / 区间）'
-   +'及是否<b>符合历史形态</b>；底部还会给出本批多注的<b>最大重合数</b></li>'
-   +'<li><b>「详细分析」</b>：每注可展开四块内容——'
-   +'①<b>号码明细</b>：每个号的历史出现次数、占比、当前遗漏、历史最大遗漏、'
-   +'冷热标签（按该号本彩种出现次数排名，前 1/3 为热）与上次开出日期；'
-   +'福彩3D / 排列三按<b>百位 / 十位 / 个位</b>分别统计；'
-   +'②<b>整注评估</b>：平均出现次数与平均当前遗漏，分别与<b>理论值</b>并列对比，并给出冷热构成；'
-   +'③<b>历史最相近的一期</b>：全史中离这注最近的一期（期号 / 日期 / 开奖号码 / 命中几个），'
-   +'以及「这注如果每期都买」的<b>命中个数分布</b>；'
-   +'④<b>形态明细</b>：和值在历史中的<b>百分位</b>、奇偶比、大小比、跨度、三区分布，'
-   +'并列出连号、同尾、与上期重号的<b>具体号码</b>；'
-   +'⑤<b>近 N 期重号矩阵</b>：近 N 期<b>每期一行</b>，列出期号、日期、开奖号码、'
-   +'与本注重合几个、具体是哪几个号，超标的行标红，末尾给出本注是否达标</li>'
-   +'<li>可用<b>「展开全部分析」</b>一次展开整批。⚠️ 这些分析回答的是'
-   +'「这注在历史上是什么来头」，<b>不代表下期更可能中</b>——偏离理论值也不意味着更容易或更不容易中奖</li>'
-   +'<li>号码可点<b>「保存」</b>进入「我的选号」，之后照常购买与核对；重复号码会被拦下</li>'
-   +'<li>底部<b>「偏好回放」</b>是这一页的关键：它对最近 24 期，每一期<b>只用该期之前的数据</b>'
-   +'按各偏好（含形态典型）生成一注，统计平均命中几个号，并与<b>理论期望值</b>并列；'
-   +'还会<b>再加一列「近 N 期避重」</b>：同一期用当前避重口径单独生成一注统计，'
-   +'避重所用的近几期同样只取该期之前的数据</li>'
-   +'<li>回放的意义不是挑出「最优偏好」，而是让你看到：<b>各偏好的实测值都围绕理论值波动，纯随机也在同一区间内</b>，'
-   +'<b>名次每次回放都会变</b>——说明没有任何偏好（包括形态典型）真正优于机选；'
-   +'<b>新增的避重列也围绕理论值波动</b>，说明「不与近几期重号」同样不提高命中率</li></ul>'
-   +'<p style="font-size:12px;color:#888"><b>形态约束不会提高中奖概率</b>——每个组合的中奖概率始终完全相同。'
-   +'它的作用是让号码<b>看起来不那么怪</b>、并防止多注雷同浪费钱；把它当作省事的选号起点即可。</p>'
+   '<p style="border-left:3px solid #c33;padding-left:8px">每期开奖都是<b>独立随机事件</b>，历史号码<b>无法推算</b>下期。'
+   +'本页是「按形态生成号码＋偏好回放」，<b>不是预测器</b>。</p>'
+   +'<ul><li>可选<b>形态典型 / 追热 / 博冷 / 遗漏回补 / 趋均值 / 纯随机</b>，用「偏向」控制强度</li>'
+   +'<li><b>各注分散度</b>与<b>避免多注雷同</b>控制多注之间岔开程度，避免重复花钱买几乎一样的号</li>'
+   +'<li><b>近 N 期避重</b>：可选近 3 / 5 / 10 期、最多重合 1 / 2 / 3 个；「严格避重」开关更紧，'
+   +'试不出来会取最接近的一注并标红</li>'
+   +'<li>每注可展开<b>详细分析</b>：号码明细、整注评估、历史最相近的一期、形态明细（和值<b>百分位</b>）、近 N 期重号矩阵</li>'
+   +'<li>底部<b>偏好回放</b>对最近 24 期逐期生成并统计命中数，还会<b>再加一列「近 N 期避重」</b>；'
+   +'各偏好都围绕理论值波动，<b>没有一种优于机选</b></li>'
+   +'<li><b>蓝球 / 后区</b>可选「指定号码」或「排除号码」；按位玩法没有蓝球，自动隐藏</li>'
+   +'<li><b>红球与蓝球重合</b>可选「不限 / 避开重合 / 必须重合」，每注都满足；'
+   +'与「指定号码」同时使用时，红球会包含或避开指定值</li>'
+   +'<li>每注点<b>「存入」</b>进入「我的选号」，按钮变「已存入 ✓」；标记已买后才归档到选号记录</li>'
+   +'<li>「按条件机选」可按和值 / 奇偶 / 大小 / 三区生成；每注点<b>「存入」</b>进入「我的选号」</li>'
+   +'<li>⚠️ 所有分析与约束都<b>不提高中奖概率</b></li></ul>'
+  },
+ {t:'菜单', b:
+   '<p>点最左侧<b>「菜单」</b>打开抽屉：<b>功能说明</b>、<b>数据来源</b>、<b>添加到桌面</b>、'
+   +'<b>显示模式</b>、<b>清除本机选号</b>。</p>'
+   +'<ul><li>开启<b>访问授权</b>后，菜单可查看有效期与本机授权码、复制或清除授权</li>'
+   +'<li>未激活时只显示锁屏，标签栏仍可打开菜单；管理员从<b>「管理员」</b>登录并签发授权码</li>'
+   +'<li><b>生成授权码</b>：填对方 4 位设备码生成<b>设备绑定码</b>（一机一码），或留空生成通用码；可设有效期、一次生成 1~20 个</li>'
+   +'<li><b>修改管理员密码</b>：填原密码与新密码，新密码至少 6 位；改密<b>仅对当前设备生效</b>，'
+   +'要让<b>所有访客生效</b>需重新发布页面（见部署文档）</li></ul>'
+  },
+ {t:'顶部信息', b:
+   '<ul><li><b>数据更新于</b>与<b>最新一期</b>显示在顶部；超过 3 天未更新会出现红色提醒</li>'
+   +'<li><b>当前时间</b>每秒自动跳动；下方<b>开奖倒计时</b>标注各彩种开奖日与时刻</li>'
+   +'<li>激活授权后顶部常驻「授权有效期至 …」，剩余 7 天内变红</li></ul>'
+  },
+ {t:'添加到桌面与显示模式', b:
+   '<ul><li>菜单 → <b>「添加到桌面」</b>按步骤操作，主屏会多一个图标；需系统浏览器（iPhone 用 Safari）</li>'
+   +'<li>通过 https 网址打开一次后，断网也能看；直接双击本地 html 文件也能离线看</li>'
+   +'<li><b>显示模式</b>可切浅色 / 深色，默认 19:00–07:00 自动深色；电脑宽屏内容居中、字号加大</li></ul>'
   },
  {t:'温馨提示', b:
-   '<p>彩票是完全随机的，任何号码的中奖概率都相同。冷热、走势、出现次数仅为已开奖结果的统计，<b>不具备预测能力</b>。请理性购彩，量力而行。</p>'
+   '<p>彩票完全随机，任何号码的中奖概率都相同。冷热、走势、出现次数只是已开奖结果的统计，'
+   +'<b>不具备预测能力</b>。请理性购彩，量力而行。</p>'
   }
 ];
 
@@ -4606,9 +4575,8 @@ function head(){
      页面上看不出来，所以超过 3 天就明确提示 */
   var age=dataAgeDays();
   if(age>=3)
-    s+='<div class="upd" style="color:#c33;font-weight:600">⚠️ 数据已 '+age
-      +' 天未更新，请按 Ctrl+F5 强制刷新，或检查仓库的定时抓取工作流是否成功</div>';
-  if(d.stale) s+='<div class="card"><div class="warn">当前为上次缓存数据（官方接口暂时不可用），稍后会自动恢复实时。</div></div>';
+    s+='<div class="upd" style="color:#c33;font-weight:600">⚠️ 数据已 '+age+' 天未更新</div>';
+  if(d.stale) s+='<div class="card"><div class="warn">当前展示的是上次成功抓取的数据快照。</div></div>';
   return s;
 }
 /* 金额简写：1056837777 → 10.57 亿 */
@@ -4795,22 +4763,10 @@ function renderTrend3(){
   h+='<div class="lgd"><span class="lgb" style="background:#e8402a"></span>百位'
     +'<span class="lgb" style="background:#2b6cd4;margin-left:8px"></span>十位'
     +'<span class="lgb" style="background:#1a9c46;margin-left:8px"></span>个位</div>';
-  /* 和值走势 */
-  var H2=150, iw2=W-PL-14, ih2=H2-PT-24;
-  function Y2(v){ return PT + ih2 - (v/27)*ih2; }
-  var sv2='<svg viewBox="0 0 '+W+' '+H2+'" width="100%" height="'+H2+'" '
-        +'style="display:block;background:var(--surface);border-radius:8px;margin-top:10px">';
-  var p2='';
-  for(var t=0;t<N;t++) p2+=(t?' ':'')+X(t).toFixed(1)+','+Y2(sumRed(disp[t])).toFixed(1);
-  sv2+='<polyline points="'+p2+'" fill="none" stroke="#c98a00" stroke-width="1.6"/>';
-  sv2+='<text x="'+(PL-8)+'" y="'+(PT+10)+'" font-size="10" text-anchor="end" fill="'
-      +(typeof svgInk==='function'?(svgInk().head):'#aaa')+'">27</text>'
-      +'<text x="'+(PL-8)+'" y="'+(PT+ih2)+'" font-size="10" text-anchor="end" fill="'
-      +(typeof svgInk==='function'?(svgInk().head):'#aaa')+'">0</text>';
-  sv2+='</svg>';
-  h+='<div class="sec">和值走势（0 ~ 27）</div>'+sv2;
-  h+='<div class="note">按位玩法每位 0-9，纵轴为该位数字；和值＝三位之和。'
-    +'走势只是已开奖结果的连线，不代表任何规律。</div></div>';
+  /* 和值走势：与选号型共用同一组件，纵轴按全历史 0~27 自适应 */
+  h+=sumTrendBlock(disp, sc.label+' · '+N+' 期');
+  h+='<div class="note">按位玩法每位 0-9，上方折线为百 / 十 / 个位数字，'
+    +'下方和值走势为三位之和。</div></div>';
   return h;
 }
 
@@ -5272,7 +5228,7 @@ function backtest(bet){
   return {n:n, list:list, top:list.slice(0,10), P:P};
 }
 
-/* ================= ⑤ 区间分布（三分区） =================
+/* ================= 区间分布（三分区） =================
    双色球 1-11 / 12-22 / 23-33，大乐透 1-12 / 13-24 / 25-35。
    按位玩法（福彩3D / 排列三）每位只有 0-9，用 0-4 / 5-9 两分区。 */
 var ZONES={
@@ -5361,7 +5317,7 @@ function renderZone(){
   return h;
 }
 
-/* ================= ⑧ 奖池 / 销量 / 一等奖走势 =================
+/* ================= 奖池 / 销量 / 一等奖走势 =================
    数据来自官方接口每期的 poolmoney / poolBalance，
    取最近 120 期（大乐透 100 期）。福彩3D / 排列三无奖池。 */
 function poolHistOf(d){ return (d && d.poolHist) || []; }
@@ -5400,101 +5356,119 @@ function blueStat(){
   }
   return {rows:out, N:N, label:sc.label, max:max};
 }
-/* ───────── ⑤ 数据自检 ─────────
-   用途：CI 抓取可能因网络被风控而静默失败，数据会悄悄缺期，页面上却看不出来。
-   本页把「看不见的风险」变成「看得见的数字」：期数、期号区间、有没有缺口。
+/* ───────── 蓝球分析：表头点击多选条件 + 综合评分排序 ─────────
+   每个已选条件把号码按该指标的名次折算成 0~100 分（越符合方向分越高），
+   多条件等权平均得「综合分」，按综合分降序排列。
+   例：出现次数↑ + 当前遗漏↓ → 次数少且遗漏久的号一起顶到最前。
+   名次制不受个别极端值影响；并列取平均名次，从未开出的号得 0 分。
+   S.blueSorts = [{k:字段, dir:1升序 / -1降序}, ...] */
+var BLUE_SORT_ORDER=['num','cnt','pct','cur','mx','gap','lastDate'];
+var BLUE_SORT_DEF={num:1,cnt:-1,pct:-1,cur:-1,mx:-1,gap:-1,lastDate:-1};
+var BLUE_SORT_NAME={num:'号码',cnt:'出现次数',pct:'占比',cur:'当前遗漏',
+  mx:'最大遗漏',gap:'平均间隔',lastDate:'上次开出'};
+var BLUE_SORT_MARK=['①','②','③'];
+function blueSortIdx(k){ var i=BLUE_SORT_ORDER.indexOf(k); return i<0?99:i; }
+function blueSortKeys(){
+  /* 兼容旧的单列状态：显式设置 S.blueSort 时重置为单列 */
+  if(S.blueSort){
+    var old=S.blueSort;
+    S.blueSorts=[{k:old, dir:old==='num'?1:-1}];
+    delete S.blueSort;
+  }
+  if(!S.blueSorts || !S.blueSorts.length) S.blueSorts=[{k:'cnt',dir:-1}];
+  /* 综合分等权平均，与条件先后无关；按列顺序归一只为表头角标稳定 */
+  S.blueSorts.sort(function(a,b){return blueSortIdx(a.k)-blueSortIdx(b.k)});
+  return S.blueSorts;
+}
+/* 字段值数值化；null 表示无值（窗口内从未开出） */
+function blueScoreVal(o,k){
+  if(k==='lastDate'){
+    if(!o.seen || !o.lastDate) return null;
+    var t=new Date(String(o.lastDate).replace(/-/g,'/')).getTime();
+    return isNaN(t)?null:t;
+  }
+  return o[k];
+}
+/* 单一条件的名次分：最符合方向的号 100 分，最不符合的 0 分，并列取平均名次 */
+function blueRankScores(arr,k,dir){
+  var i,j,r,t,sc={},vals=[],idx=[],n,s;
+  for(i=0;i<arr.length;i++) vals.push(blueScoreVal(arr[i],k));
+  for(i=0;i<arr.length;i++) if(vals[i]!=null) idx.push(i);
+  n=idx.length;
+  if(!n){ for(i=0;i<arr.length;i++) sc[arr[i].num]=0; return sc; }
+  idx.sort(function(x,y){
+    var c=dir===1?(vals[x]-vals[y]):(vals[y]-vals[x]);
+    return c || (arr[x].num-arr[y].num);
+  });
+  for(i=0;i<n;){
+    j=i;
+    while(j+1<n && vals[idx[j+1]]===vals[idx[j]]) j++;
+    r=(i+j)/2;
+    s=n<=1?100:(n-1-r)/(n-1)*100;
+    for(t=i;t<=j;t++) sc[arr[idx[t]].num]=s;
+    i=j+1;
+  }
+  for(i=0;i<arr.length;i++) if(vals[i]==null) sc[arr[i].num]=0;
+  return sc;
+}
+/* 给每行算综合分（0~100），多条件等权平均；无值（从未开出）固定排最后 */
+function blueScoreRows(arr){
+  var ks=blueSortKeys(), i, j, maps=[];
+  for(i=0;i<ks.length;i++) maps.push(blueRankScores(arr,ks[i].k,ks[i].dir));
+  for(i=0;i<arr.length;i++){
+    var o=arr[i], sum=0, miss=false;
+    for(j=0;j<maps.length;j++){
+      sum+=(maps[j][o.num]||0);
+      if(blueScoreVal(o,ks[j].k)==null) miss=true;
+    }
+    o._sc=maps.length?sum/maps.length:0;
+    o._miss=miss;
+  }
+  return arr;
+}
+/* 综合分降序；无值行垫底，同分按号码升序，保证结果确定 */
+function blueSortCmp(a,b){
+  if(!!a._miss!==!!b._miss) return a._miss?1:-1;
+  var c=(b._sc||0)-(a._sc||0);
+  return c || (a.num-b.num);
+}
+function blueApplySort(arr){ return blueScoreRows(arr).sort(blueSortCmp); }
+function blueSortSet(k){
+  /* 未参与 → 加入（默认方向）；已参与 → 只翻方向。取消交给表头 ×。 */
+  var ks=blueSortKeys(), i, idx=-1, def=BLUE_SORT_DEF[k];
+  if(def==null) return;
+  for(i=0;i<ks.length;i++) if(ks[i].k===k){ idx=i; break; }
+  S.blueSortHint='';
+  if(idx<0){
+    if(ks.length>=3){
+      var gone=ks.pop();
+      S.blueSortHint='最多 3 个条件，已移除「'+(BLUE_SORT_NAME[gone.k]||gone.k)+'」';
+    }
+    ks.push({k:k, dir:def});
+  }else{
+    ks[idx].dir=-ks[idx].dir;
+  }
+  delete S.blueSort;
+  render();
+}
+function blueSortRemove(k){
+  var ks=blueSortKeys(), i;
+  for(i=0;i<ks.length;i++) if(ks[i].k===k){ ks.splice(i,1); break; }
+  if(!ks.length) ks.push({k:'cnt',dir:-1});   /* 至少保留一个条件 */
+  S.blueSortHint='';
+  delete S.blueSort;
+  render();
+}
+function blueSortReset(){
+  S.blueSorts=[{k:'cnt',dir:-1}];
+  S.blueSortHint='';
+  delete S.blueSort;
+  render();
+}
 
-   期号格式（实测确认）：
-     ssq / 3d  = 7 位 YYYY+NNN（2013001 = 2013 年第 001 期）
-     dlt / pls = 5 位   YY+NNN（  07001 = 2007 年第 001 期）
-   连续性判定按 (年, 序号) 解析：同一年内序号应 +1；跨年时新年的序号应从 1 开始。
-   这样才不会把「2013 年第 365 期 → 2014 年第 001 期」误判成缺 364 期。 */
-function issParse(i){
-  i=String(i||'').replace(/\D/g,'');
-  if(i.length===7) return {y:parseInt(i.slice(0,4),10), s:parseInt(i.slice(4),10)};
-  if(i.length===5) return {y:2000+parseInt(i.slice(0,2),10), s:parseInt(i.slice(2),10)};
-  return null;
-}
-function issFmt(y,s){ return y + ('000'+s).slice(-3); }
-function healthOf(d){
-  var rows=(d&&d.rows)||[], i, res={n:rows.length, first:'', last:'', gaps:[], bad:0, ok:true};
-  if(!rows.length){ res.ok=false; return res; }
-  res.first=String(rows[0][0]); res.last=String(rows[rows.length-1][0]);
-  var prev=null, seen={};
-  for(i=0;i<rows.length;i++){
-    var c=issParse(rows[i][0]); if(!c) continue;
-    if(seen[c.y+'-'+c.s]) res.bad++;            /* 重复期号 */
-    seen[c.y+'-'+c.s]=1;
-    if(prev){
-      if(c.y===prev.y){
-        if(c.s!==prev.s+1 && c.s>prev.s)
-          for(var g=prev.s+1; g<c.s && res.gaps.length<300; g++) res.gaps.push(issFmt(prev.y,g));
-      }else if(c.y>prev.y){
-        /* 跨年：新一年允许从 001 重新开始，缺的是 1 ~ c.s-1 */
-        if(c.s>1) for(var g2=1; g2<c.s && res.gaps.length<300; g2++) res.gaps.push(issFmt(c.y,g2));
-      }else{
-        res.bad++;                              /* 期号倒序 */
-      }
-    }
-    prev=c;
-  }
-  res.ok = (res.gaps.length===0 && res.bad===0);
-  return res;
-}
-function renderHealth(){
-  var lots=['ssq','dlt','3d','pls'], i, h='';
-  h+='<div class="card"><div class="sec">数据自检</div>'
-   +'<div class="note">检查各彩种的<b>期数、期号区间、期号是否连续</b>。'
-   +'自动抓取可能因网络原因静默失败，数据会悄悄缺期而页面上不易察觉——本页用来发现这种情况。</div></div>';
-  for(i=0;i<lots.length;i++){
-    var lot=lots[i], d=D[lot];
-    if(!d){                                     /* 未加载的彩种：给个「尚未加载」态 */
-      h+='<div class="card"><div style="font-weight:600">'+esc(LOTNAME[lot]||lot)
-        +'</div><div class="empty">尚未加载</div></div>';
-      continue;
-    }
-    var r=healthOf(d), gapN=r.gaps.length;
-    var color = r.ok ? 'var(--brand,#1a9c46)' : (gapN>20 ? '#c33' : '#c88');
-    h+='<div class="card">';
-    h+='<div class="bar"><label>'+esc(d.name)+'</label>'
-      +'<span style="color:'+color+';font-weight:600;font-size:13px">'
-      +(r.ok?'✓ 连续完整':'⚠ 缺 '+gapN+' 期')+'</span></div>';
-    h+='<div style="display:flex;gap:8px;padding:0 12px 8px;flex-wrap:wrap">'
-      +'<div style="flex:1;min-width:92px;background:var(--surface2);border-radius:8px;padding:8px 10px">'
-      +'<div style="font-size:11px;color:var(--fg5)">总期数</div>'
-      +'<div style="font-size:17px;font-weight:700">'+r.n+'</div></div>'
-      +'<div style="flex:2;min-width:150px;background:var(--surface2);border-radius:8px;padding:8px 10px">'
-      +'<div style="font-size:11px;color:var(--fg5)">期号区间</div>'
-      +'<div style="font-size:15px;font-weight:700">'+esc(r.first)+' ~ '+esc(r.last)+'</div></div>'
-      +'</div>';
-    if(r.ok){
-      h+='<div class="note">期号连续，无缺口、无重复。</div>';
-    }else{
-      if(r.bad) h+='<div class="msg"><div class="e">✗ 存在 '+r.bad+' 处期号异常（重复或倒序）</div></div>';
-      if(gapN){
-        var show=r.gaps.slice(0,60).map(function(x){return esc(x)}).join('、');
-        h+='<div style="padding:0 12px 8px"><div style="font-size:12px;color:#c33;font-weight:600;'
-          +'margin-bottom:4px">缺失期号（最多显示 60 个，共 '+gapN+' 个）</div>'
-          +'<div style="font-size:12px;line-height:1.7;color:var(--fg5);word-break:break-all">'+show
-          +(gapN>60?' …':'')+'</div></div>';
-      }
-      h+='<div class="note">⚠️ 历史区间<b>不完整</b>，涉及缺失期段的统计（出现次数、遗漏等）'
-        +'会略有偏差——不是算错，是原始数据就缺。'
-        +'云端重新抓取后可能补齐；若官方接口本身就没有更早的数据，缺口无法补齐。</div>';
-    }
-    h+='</div>';
-  }
-  h+='<div class="card"><div class="note">'
-    +'<b>怎么看结果</b>：显示「✓ 连续完整」表示期号从首到尾没有断档。'
-    +'缺少数期通常是抓取时漏了几期，多数情况下不影响近期统计；'
-    +'若某一整年的数据大面积缺失（如福彩3D 早期），说明官方接口本身就没返回那么早的数据。</div></div>';
-  return h;
-}
-/* ───────── ③ 公共骨架 ─────────
+/* ───────── 公共骨架 ─────────
    「蓝球分析」与「奖池走势」结构高度一致（汇总卡 + 图 + 表 + 窗口下拉），
-   原来各自手写了 90 / 86 行，大半重复。这里抽出两个公共函数复用。
-   statCards: 一行汇总卡。每项 = [标题, 主数值, 主色(可空), 副文字(可空)]
-   sortTh   : 可点击排序的表头。setter 为切换排序的 JS 语句片段 */
+   statCards: 一行汇总卡。每项 = [标题, 主数值, 主色(可空), 副文字(可空)] */
 function statCards(items){
   var h='<div style="display:flex;gap:8px;padding:0 12px 10px;flex-wrap:wrap">', i;
   for(i=0;i<items.length;i++){
@@ -5506,10 +5480,6 @@ function statCards(items){
       +'</div>';
   }
   return h+'</div>';
-}
-function sortTh(label, on, setter){
-  return '<th style="cursor:pointer" onclick="'+setter+'">'+esc(label)
-    +(on?' <span style="color:var(--brand)">▼</span>':'')+'</th>';
 }
 function renderBlue(){
   var d=D[S.lot];
@@ -5523,19 +5493,17 @@ function renderBlue(){
     return h;
   }
   var st=blueStat(), N=st.N, arr=st.rows.slice();
-  var sort=S.blueSort||'cnt';
-  arr.sort(function(a,b){
-    if(sort==='num') return a.num-b.num;
-    if(sort==='cur') return b.cur-a.cur || a.num-b.num;
-    if(sort==='mx')  return b.mx-a.mx   || a.num-b.num;
-    return b.cnt-a.cnt || a.num-b.num;   /* 默认按出现次数降序 */
-  });
+  var keys=blueSortKeys();
+  blueApplySort(arr);
   /* 窗口选择 */
   h+='<div class="bar"><label>窗口</label>'
    +'<select onchange="S.blueWin=this.value;render()">'
    +[['month','近一个月'],['year','近一年'],['all','全部历史']]
      .map(function(o){return '<option value="'+o[0]+'"'+((S.blueWin||'all')===o[0]?' selected':'')+'>'+o[1]+'</option>'}).join('')
    +'</select><label style="color:var(--fg5);font-size:12px">'+esc(st.label)+' · '+N+' 期</label></div>';
+  /* 多选排序完全由表头点击完成，不再放控件区；仅在超出 3 列时给一行提示 */
+  if(S.blueSortHint)
+    h+='<div style="padding:0 12px 8px;font-size:11px;color:#c33">'+esc(S.blueSortHint)+'</div>';
   /* 汇总卡 */
   var tot=0, curMax=0, curMaxN=0, mxAll=0, mxAllN=0, hot=0, hotN=0;
   for(var i=0;i<st.rows.length;i++){
@@ -5544,7 +5512,7 @@ function renderBlue(){
     if(o.mx>mxAll){ mxAll=o.mx; mxAllN=o.num; }
     if(o.cnt>hot){ hot=o.cnt; hotN=o.num; }
   }
-  /* ③ 改用公共骨架 statCards */
+  /* 改用公共骨架 statCards */
   h+=statCards([
     ['开出个数', tot],
     ['最热号码', pad(hotN), '#d63a2a', hot+' 次'],
@@ -5554,27 +5522,46 @@ function renderBlue(){
   /* 三档遗漏条：冷 / 温 / 热 */
   var byCur=st.rows.slice().sort(function(a,b){return b.cur-a.cur});
   var third=Math.max(1,Math.ceil(byCur.length/3));
-  function barOf(list, title, color){
-    var s='<div style="padding:6px 12px 0"><div style="font-size:12px;color:'+color
-      +';font-weight:600;margin-bottom:4px">'+title+'</div><div style="display:flex;flex-wrap:wrap;gap:5px">';
+  function barOf(list, title, cls){
+    var s='<div class="zgrp '+cls+'"><div class="zt">'+title+'</div><div class="zrow">';
     for(var k=0;k<list.length;k++){
       var o=list[k];
-      s+='<span class="nb b" style="min-width:auto">'+pad(o.num)
-        +'<span style="font-size:10px;opacity:.7;margin-left:2px">'+o.cur+'</span></span>';
+      s+='<span class="zball"><b class="znum">'+pad(o.num)+'</b>'
+        +'<span class="zbadge">漏 '+o.cur+'</span>'
+        +'<span class="zcnt">出 '+o.cnt+' 次</span></span>';
     }
     return s+'</div></div>';
   }
-  h+=barOf(byCur.slice(0,third),'冷区（遗漏最长）','#3b6fd4');
-  h+=barOf(byCur.slice(third,third*2),'温区','#888');
-  h+=barOf(byCur.slice(third*2),'热区（近期开出）','#d63a2a');
+  h+=barOf(byCur.slice(0,third),'冷区（遗漏最长）','cold');
+  h+=barOf(byCur.slice(third,third*2),'温区','warm');
+  h+=barOf(byCur.slice(third*2),'热区（近期开出）','hot');
   h+='<div style="font-size:11px;color:var(--fg5);padding:6px 12px 0">'
-    +'数字为「当前遗漏期数」，按遗漏从长到短排列</div>';
+    +'大字是<b>号码</b>，彩色胶囊是<b>当前遗漏期数</b>，下方小字是<b>累计出现次数</b>；三档按遗漏从长到短排列</div>';
   /* 完整表格 */
-  function th(k,t){ return '<th style="cursor:pointer" onclick="S.blueSort=\''+k+'\';render()">'+t
-    +(sort===k?' <span style="color:var(--brand)">▼</span>':'')+'</th>'; }
+  function th(k,t){
+    var pos=-1, q;
+    for(q=0;q<keys.length;q++) if(keys[q].k===k){ pos=q; break; }
+    var mark = pos>=0
+      ? ' <span style="color:var(--brand);font-weight:700;font-size:12px;white-space:nowrap">'
+        +BLUE_SORT_MARK[pos]+(keys[pos].dir===1?'↑':'↓')+'</span>'
+        +'<span title="取消该列" style="margin-left:4px;color:var(--fg5);font-size:12px;cursor:pointer"'
+        +' onclick="event.stopPropagation();blueSortRemove(\''+k+'\')">×</span>'
+      : '';
+    return '<th style="cursor:pointer;white-space:nowrap" title="点击加入排序；再点切换升降；× 取消"'
+      +' onclick="blueSortSet(\''+k+'\')">'+t+mark+'</th>';
+  }
+  /* 当前条件：用「＋」连接，强调等权而不是先后 */
+  var sortTxt=keys.map(function(o,i){
+    return (BLUE_SORT_NAME[o.k]||o.k)+' '+(o.dir===1?'↑':'↓');
+  }).join(' ＋ ');
+  h+='<div class="bar" style="font-size:12px;gap:8px;flex-wrap:wrap">'
+    +'<span style="color:var(--fg5)">综合排序</span><b>'+esc(sortTxt)+'</b>'
+    +'<span style="color:var(--fg5)">各条件等权，综合分越高越靠前</span>'
+    +'<button class="mini" style="margin-left:auto" onclick="blueSortReset()">恢复默认</button></div>';
   h+='<div style="overflow-x:auto;margin-top:10px"><table class="tb"><thead><tr>'
-    +th('num',esc(d.blueLabel))+th('cnt','出现次数')+'<th>占比</th>'
-    +th('cur','当前遗漏')+th('mx','最大遗漏')+'<th>平均间隔</th><th>上次开出</th>'
+    +th('num',esc(d.blueLabel))+th('cnt','出现次数')+th('pct','占比')
+    +th('cur','当前遗漏')+th('mx','最大遗漏')+th('gap','平均间隔')+th('lastDate','上次开出')
+    +'<th title="各排序条件名次分的等权平均，越高越靠前" style="white-space:nowrap">综合分</th>'
     +'</tr></thead><tbody>';
   for(var j=0;j<arr.length;j++){
     var o=arr[j];
@@ -5582,12 +5569,17 @@ function renderBlue(){
       +'<td>'+o.cnt+'</td><td>'+o.pct.toFixed(2)+'%</td>'
       +'<td'+(o.cur>=30?' style="color:#c33;font-weight:600"':'')+'>'+o.cur+'</td>'
       +'<td>'+o.mx+'</td><td>'+o.gap+'</td>'
-      +'<td>'+(o.seen?esc(o.lastDate||'—'):'—')+'</td></tr>';
+      +'<td>'+(o.seen?esc(o.lastDate||'—'):'—')+'</td>'
+      +'<td style="min-width:76px"><div style="display:flex;align-items:center;gap:5px">'
+      +'<b'+(o._sc>=80?' style="color:var(--brand)"':'')+'>'+Math.round(o._sc)+'</b>'
+      +'<span style="flex:1;min-width:26px;height:4px;background:var(--surface2);border-radius:2px;overflow:hidden">'
+      +'<span style="display:block;height:100%;width:'+Math.round(o._sc)+'%;background:var(--brand)"></span>'
+      +'</span></div></td></tr>';
   }
   h+='</tbody></table></div>';
-  h+='<div class="note">'+esc(d.blueLabel)+'单独成页，不用再在走势图里横向滑动查找。'
-    +'<b>当前遗漏</b>=距上次开出已连续多少期没出；<b>平均间隔</b>=总期数÷出现次数，越小越频繁。'
-    +'点表头可切换排序。</div></div>';
+  h+='<div class="note"><b>点表头加条件</b>，再点切升↑降↓，点 × 取消（最多 3 项）；'
+    +'各条件等权折算成综合分，越高越靠前。'
+    +'<b>当前遗漏</b>=距上次开出连续多少期没出；<b>平均间隔</b>=总期数÷出现次数。</div></div>';
   return h;
 }
 
@@ -5734,7 +5726,7 @@ function fsRangeRow(label,k1,k2,ph1,ph2){
     +'<input type="number" inputmode="numeric" style="width:76px;font-size:13px" placeholder="'+ph2+'" '
     +'value="'+esc(S[k2])+'" onchange="S.'+k2+'=this.value;render()"></div>';
 }
-/* ⑥ 「缩水」与「复式」共用号码盘，只有「胆拖」是另一套（胆码+拖码） */
+/* 「缩水」与「复式」共用号码盘，只有「胆拖」是另一套（胆码+拖码） */
 function fsIsFushi(){ return S.fsMode!=='dantuo'; }
 function fsShrinkCard(r){
   var d=D[S.lot], h='', P=isPos();
@@ -5825,7 +5817,7 @@ function fsCopy(){
   }
   copyText(t);
 }
-/* ④ 号码盘按玩法拆开：原来按位分支与红蓝分支交错在同一个函数里，
+/* 号码盘按玩法拆开：原来按位分支与红蓝分支交错在同一个函数里，
    读代码要同时记两套逻辑。拆成两个独立函数后，各自只管一种玩法。 */
 function fsdtPos(d){
   var h='';
@@ -5949,7 +5941,7 @@ function setTab(t){S.tab=t;S.recDel=-1;S.recClear=false;render()}
    现在只在这里声明：id / 名称 / 非按位玩法渲染函数 a / 按位玩法渲染函数 b。
    extra = 同一页签内追加的区块（如冷热分布后面挂区间分布和遗漏排行）。
    ════════════════════════════════════════════════════════ */
-/* ═══════ ① 号码统计：出现次数 / 冷热分布 / 遗漏排行 三视图合一 ═══════
+/* ═══════ 号码统计：出现次数 / 冷热分布 / 遗漏排行 三视图合一 ═══════
    原本是三个页签，但读的是同一批数据，只是呈现方式不同：
    表格（次数占比）/ 色块（偏离标准差）/ 排行（当前遗漏）。
    合并为一个页签 + 顶部视图切换，窗口下拉共用；② 蓝球统一收敛到「蓝球分析」页。 */
@@ -6104,7 +6096,7 @@ function renderStat3(){
   h+='</div>';
   return h;
 }
-/* ───────── ⑩ 猜号参考 ─────────
+/* ───────── 猜号参考 ─────────
    诚实前提（写进代码，也写进界面）：
    彩票每期开奖是独立随机事件，历史号码在数学上无法推算下期结果。
    本页不是「预测器」，它做两件诚实的事：
@@ -6178,9 +6170,9 @@ function guessWeights(st, min, max, strategy, per){
   return w;
 }
 /* 加权不重复抽样（轮盘赌） */
-function guessSample(w, min, max, k, pen){
+function guessSample(w, min, max, k, pen, ban){
   var cand=[], n;
-  for(n=min;n<=max;n++) cand.push(n);
+  for(n=min;n<=max;n++) if(!(ban&&ban[n])) cand.push(n);
   var out=[];
   for(var t=0;t<k&&cand.length;t++){
     var tot=0, i, ww=[];
@@ -6381,8 +6373,14 @@ function guessTooSimilar(g, list, maxOv){
   for(i=0;i<list.length;i++) if(guessOverlap(g.r, list[i].r)>maxOv) return true;
   return false;
 }
-/* 单注原始生成（不含形态约束） */
-function guessOneRaw(strategy, upto, pen){
+/* 单注原始生成（不含形态约束）。
+   rbCfg={rb:'any'|'avoid'|'must', blues:[...]}：先定蓝球再采红球，
+   must 把某个蓝球数字作为红球种子强制入选，avoid 从候选里剔除蓝球数字。
+   两者都在采样阶段完成，不存在「事后补救」导致部分注不达标。
+   双色球蓝球 1~16、大乐透后区 1~12 都落在红球范围内，
+   所以「指定号码 + 必须重合」永远有解，不需要任何冲突标注。
+   不传 rbCfg（偏好回放）时保持原来的按权重采样行为。 */
+function guessOneRaw(strategy, upto, pen, rbCfg){
   var d=D[S.lot];
   if(isPos()){
     var out=[], p;
@@ -6392,15 +6390,25 @@ function guessOneRaw(strategy, upto, pen){
     }
     return {r:out, b:[]};
   }
+  var rb=rbCfg?rbCfg.rb:'any', blues=(rbCfg&&rbCfg.blues)||[];
+  var ban={}, seed=0, pool=[], i;
+  if(rb==='avoid'){
+    for(i=0;i<blues.length;i++) if(blues[i]>=1&&blues[i]<=d.redMax) ban[blues[i]]=1;
+  }else if(rb==='must'){
+    for(i=0;i<blues.length;i++) if(blues[i]>=1&&blues[i]<=d.redMax) pool.push(blues[i]);
+    if(pool.length){ seed=pool[Math.floor(Math.random()*pool.length)]; ban[seed]=1; }
+  }
   var wR=guessWeightsCached(strategy, upto, 2, 1, d.redMax, d.redCount/d.redMax, -1);
-  var reds=guessSample(wR, 1, d.redMax, d.redCount, pen);
-  var blues=[];
-  if(d.blueMax){
+  var reds=seed?[seed]:[];
+  reds=reds.concat(guessSample(wR, 1, d.redMax, d.redCount-reds.length, pen, ban))
+           .sort(function(a,b){return a-b});
+  var bs=blues.slice();
+  if(!bs.length && d.blueMax){
     var wB=guessWeightsCached(strategy, upto, 3, 1, d.blueMax,
                               (d.blueCount||1)/d.blueMax, -1);
-    blues=guessSample(wB, 1, d.blueMax, d.blueCount||1);
+    bs=guessSample(wB, 1, d.blueMax, d.blueCount||1);
   }
-  return {r:reds, b:blues};
+  return {r:reds, b:bs};
 }
 /* 由已生成的一批算出「降权表」：被用过的号权重打折。
    旧版靠 guessTooSimilar 硬拒绝，偏好一强就频繁撞车、
@@ -6424,7 +6432,7 @@ function guessPenalty(list, spread){
    阶段①全满足 → ②放宽形态 → ③放宽避重（取违反程度最小的一注并标记）。
    严格 B 的通过率约 12%，若用硬拒绝会频繁撞车、连带把反雷同也拖垮，
    这正是前几轮「多注雷同」复发的老毛病。 */
-function guessOne(strategy, upto, prof, avoid, maxOv, cfg, tries){
+function guessOne(strategy, upto, prof, avoid, maxOv, cfg, tries, rbCfg){
   var t, g, m;
   var pen=guessPenalty(avoid, S.guessSpread);
   var T1=tries?tries[0]:80, T2=tries?tries[1]:60, T3=tries?tries[2]:60;
@@ -6432,32 +6440,52 @@ function guessOne(strategy, upto, prof, avoid, maxOv, cfg, tries){
   function simOK(x){ return !(avoid && maxOv<90 && guessTooSimilar(x, avoid, maxOv)); }
   function recentOK(x){ return !hasCfg || guessRecentOK(x, cfg); }
   function viol(x){ return hasCfg ? guessRecentViolation(x,cfg.recent,cfg.N,cfg.M,cfg.strict) : 0; }
+  function rbOK(x){
+    if(!rbCfg||rbCfg.rb==='any'||isPos()) return true;
+    var m={}, i, hit=0;
+    for(i=0;i<x.r.length;i++) m[x.r[i]]=1;
+    for(i=0;i<x.b.length;i++) if(m[x.b[i]]) hit++;
+    return rbCfg.rb==='must' ? hit>0 : hit===0;
+  }
   for(t=0;t<T1;t++){
-    g=guessOneRaw(strategy, upto, pen);
+    g=guessOneRaw(strategy, upto, pen, rbCfg);
     if(prof){
       m = prof.pos ? guessMorphPos(g.r, prof.last) : guessMorph(g.r, prof.last);
       if(!guessMorphOK(m, prof)) continue;
     }
     if(!simOK(g)) continue;
     if(!recentOK(g)) continue;
+    if(!rbOK(g)) continue;
     return g;
   }
-  for(t=0;t<T2;t++){                       /* 放宽形态，仍守住反雷同与避重 */
-    g=guessOneRaw(strategy, upto, pen);
+  for(t=0;t<T2;t++){                       /* 放宽形态，仍守住反雷同、避重与红蓝重合 */
+    g=guessOneRaw(strategy, upto, pen, rbCfg);
     if(!simOK(g)) continue;
     if(!recentOK(g)) continue;
+    if(!rbOK(g)) continue;
     return g;
   }
   /* 软约束：优先同时满足反雷同；实在不行只按避重最接近取，并标注未达标 */
   var bestBoth=null, bestBothV=1e9, bestAny=null, bestAnyV=1e9;
   for(t=0;t<T3;t++){
-    g=guessOneRaw(strategy, upto, pen);
+    g=guessOneRaw(strategy, upto, pen, rbCfg);
+    if(!rbOK(g)) continue;                 /* 红蓝重合绝不放宽 */
     var v=viol(g);
     if(v<bestAnyV){ bestAnyV=v; bestAny=g; }
     if(simOK(g) && v<bestBothV){ bestBothV=v; bestBoth=g; }
     if(v===0 && simOK(g)) return g;
   }
-  var pick=bestBoth||bestAny||guessOneRaw(strategy, upto, pen);
+  var pick=bestBoth||bestAny;
+  if(!pick){
+    pick=guessOneRaw(strategy, upto, pen, rbCfg);
+    /* 极端兜底：把种子号写进红球，保证 must 一定有重合号 */
+    if(rbCfg&&rbCfg.rb==='must'){
+      var d2=D[S.lot], pp=(rbCfg.blues||[]).filter(function(x){return x>=1&&x<=d2.redMax;});
+      if(pp.length && pick.r.indexOf(pp[0])<0){
+        pick.r[0]=pp[0]; pick.r.sort(function(a,b){return a-b});
+      }
+    }
+  }
   pick._recentWarn = hasCfg && (viol(pick)>0);
   return pick;
 }
@@ -6505,9 +6533,103 @@ function guessBacktest(strategy, K, rounds, cfg){
           red:cnt?sumR/cnt:0, blue:cnt?sumB/cnt:0,
           rRed:cfg?(cnt?sumRR/cnt:0):null, rBlue:cfg?(cnt?sumRB/cnt:0):null};
 }
+/* ─── 蓝球 / 后区：指定号码或排除号码 ───
+   只在「生成号码」这一批生效；偏好回放仍走自动，不受指定影响。 */
+function guessBlueSpec(){
+  var d=D[S.lot];
+  if(!d||!d.blueMax||isPos()) return {mode:'auto',list:[],err:''};
+  var mode=S.guessBlueMode||'auto';
+  if(mode==='auto') return {mode:'auto',list:[],err:''};
+  var raw=String(S.guessBlueNums||'').trim();
+  if(!raw) return {mode:mode,list:[],err:'请填写号码'};
+  var parts=raw.split(/[\s,，、;；]+/), seen={}, list=[], bad=[], i, v;
+  for(i=0;i<parts.length;i++){
+    if(!parts[i]) continue;
+    v=parseInt(String(parts[i]).replace(/^0+/,''),10);
+    if(isNaN(v)||v<1||v>d.blueMax){ bad.push(parts[i]); continue; }
+    if(seen[v]) continue; seen[v]=1; list.push(v);
+  }
+  if(bad.length) return {mode:mode,list:list,err:'超出范围：'+bad.join('、')+'（应为 1~'+d.blueMax+'）'};
+  if(!list.length) return {mode:mode,list:[],err:'没有有效号码'};
+  return {mode:mode,list:list,err:''};
+}
+function guessBluePad(list){
+  return list.map(function(x){return pad(x)}).join(' ');
+}
+/* 为第 i 注先确定蓝球 / 后区：指定多个时按注轮流分配；排除模式从剩余号随机取。
+   先定蓝球，红球再按重合口径采样——这是「指定 13 + 必须重合」能注注达标的关键。 */
+function guessPlanBlues(spec, i, need, blueMax){
+  var j, v, used={}, out=[], pool=[], ex={};
+  if(spec.mode==='only'){
+    for(j=0;j<need&&spec.list.length;j++){
+      v=spec.list[(i*need+j)%spec.list.length];
+      if(!used[v]){ out.push(v); used[v]=1; }
+    }
+    for(v=1;v<=blueMax&&out.length<need;v++) if(!used[v]){ out.push(v); used[v]=1; }
+  }else{
+    if(spec.mode==='exclude') for(j=0;j<spec.list.length;j++) ex[spec.list[j]]=1;
+    for(v=1;v<=blueMax;v++) if(!ex[v]) pool.push(v);
+    out=guessTake(pool,need);
+  }
+  return out.sort(function(a,b){return a-b});
+}
+/* 红球与蓝球（后区）数字是否重合：any 不限 / avoid 避开 / must 至少重合一个。
+   按位玩法没有蓝球，控件与约束都自动隐藏。 */
+function guessRBBar(d){
+  var v=S.guessRB||'any';
+  var h='<div class="bar"><label>'+esc(d.redLabel)+'与'+esc(d.blueLabel)+'重合</label>'
+   +'<select onchange="S.guessRB=this.value;S.guessList=null;render()">'
+   +'<option value="any"'+(v==='any'?' selected':'')+'>不限</option>'
+   +'<option value="avoid"'+(v==='avoid'?' selected':'')+'>避开重合</option>'
+   +'<option value="must"'+(v==='must'?' selected':'')+'>必须重合</option>'
+   +'</select></div>';
+  if(v!=='any')
+    h+='<div class="note" style="margin:0 12px 8px">'
+      +(v==='avoid'
+        ? '生成的'+esc(d.blueLabel)+'数字不与本注'+esc(d.redLabel)+'重复，每注都满足。'
+        : '每注至少有一个'+esc(d.blueLabel)+'数字与本注'+esc(d.redLabel)+'相同；'
+          +'与「指定号码」同时使用时，'+esc(d.redLabel)+'会包含指定值，两者不冲突。')
+      +'</div>';
+  return h;
+}
+/* 从候选里随机取 cnt 个（不重复） */
+function guessTake(arr,cnt){
+  var p=[],q=arr.slice();
+  while(p.length<cnt && q.length) p.push(q.splice(Math.floor(Math.random()*q.length),1)[0]);
+  return p;
+}
+function guessBlueBar(d){
+  var mode=S.guessBlueMode||'auto', sp=guessBlueSpec();
+  var h='<div class="bar"><label>'+esc(d.blueLabel)+'</label>'
+   +'<select onchange="S.guessBlueMode=this.value;S.guessList=null;render()">'
+   +'<option value="auto"'+(mode==='auto'?' selected':'')+'>自动</option>'
+   +'<option value="only"'+(mode==='only'?' selected':'')+'>指定号码</option>'
+   +'<option value="exclude"'+(mode==='exclude'?' selected':'')+'>排除号码</option>'
+   +'</select>';
+  if(mode!=='auto')
+    h+='<input class="ipt" type="text" inputmode="numeric" placeholder="如 03 07 11" '
+      +'value="'+esc(S.guessBlueNums||'')+'" '
+      +'onchange="S.guessBlueNums=this.value;S.guessList=null;render()">';
+  h+='</div>';
+  if(mode!=='auto')
+    h+='<div class="note" style="margin:0 12px 8px">'
+      +(sp.err? '<span style="color:#c33">✗ '+esc(sp.err)+'</span>'
+        :(mode==='only'
+          ? '每注'+esc(d.blueLabel)+'只从 <b>'+guessBluePad(sp.list)+'</b> 中取；指定多个时按注轮流分配。'
+          : '生成时跳过 <b>'+guessBluePad(sp.list)+'</b>。'))
+      +'</div>';
+  return h;
+}
+/* 蓝球在 guessRun 里先定好，红球在 guessOneRaw 里按重合口径采样，
+   不再做事后补救——避免「指定了号码但只有部分注满足重合」。 */
+function guessGo(){ setTab('guess'); }
 function guessRun(){
   var upto=guessUpTo();
   if(!upto){ toast('数据尚未加载'); return; }
+  var bspec=guessBlueSpec();
+  if(bspec.err){ toast(bspec.err); return; }
+  var d=D[S.lot], rb=S.guessRB||'any', need=(d&&d.blueCount)||1;
+  var needBlue=(!isPos() && d && d.blueMax && (rb!=='any' || bspec.mode!=='auto'));
   var n=+S.guessN||5, strat=S.guessStrat||'morph', i;
   var prof=guessProfile(upto);
   var dedup=(S.guessDedup===undefined)?true:!!S.guessDedup;
@@ -6516,7 +6638,10 @@ function guessRun(){
   var cfg={N:rN, M:rM, strict:rStrict, recent:guessRecentRows(upto, rN)};
   var out=[];
   for(i=0;i<n;i++){
-    var g=guessOne(strat, upto, prof, out, maxOv, cfg);
+    var blues=needBlue?guessPlanBlues(bspec,i,need,d.blueMax):[];
+    var rbCfg=needBlue?{rb:rb, blues:blues}:null;
+    var g=guessOne(strat, upto, prof, out, maxOv, cfg, null, rbCfg);
+    g._bluePinned=(bspec.mode==='only'); g._rbMode=rb;
     if(prof){
       g._m = prof.pos ? guessMorphPos(g.r, prof.last) : guessMorph(g.r, prof.last);
       g._ok = guessMorphOK(g._m, prof);
@@ -6525,20 +6650,28 @@ function guessRun(){
                viol:guessRecentViolation(g, cfg.recent, rN, rM, rStrict)};
     out.push(g);
   }
+  S.guessBlueApplied=bspec; S.guessRBApplied=rb;
+  S.guessSaved={};
   S.guessList=out; S.guessLot=S.lot; S.guessAt=guessNow();
   render();
 }
 function guessSave(i){
   var g=(S.guessList||[])[i]; if(!g){ return; }
+  var bet={r:g.r.slice(), b:(g.b||[]).slice(), bought:0, t:Date.now()};
   var a=getBets(), j, dup=false;
   for(j=0;j<a.length;j++){
     var x=a[j]||{};
-    if(String((x.r||[]).join(','))===String(g.r.join(','))
-       && String((x.b||[]).join(','))===String((g.b||[]).join(','))){ dup=true; break; }
+    if(String((x.r||[]).join(','))===String(bet.r.join(','))
+       && String((x.b||[]).join(','))===String(bet.b.join(','))){ dup=true; break; }
   }
   if(dup){ toast('这组号码已经在「我的选号」里了'); return; }
-  a.push({r:g.r.slice(), b:(g.b||[]).slice(), bought:0, t:guessNow()});
-  saveBets(a); toast('已保存到「我的选号」'); render();
+  var sm=simCheck(S.lot, bet);
+  if(sm.same){ toast('这注已经保存过了（'+fmtTs(sm.same.o.t)+'），不必重复添加'); return; }
+  a.push(bet); saveBets(a);
+  if(!S.guessSaved) S.guessSaved={};
+  S.guessSaved[i]=1;
+  simFlash(sm); render();
+  toast('已存入「我的选号」');
 }
 function guessRunBT(){
   if(!guessUpTo()){ toast('数据尚未加载'); return; }
@@ -6675,7 +6808,7 @@ function guessDetail(i){
   var upto=tb.upto, h='', j, n;
   var prof=guessProfile(upto);
 
-  /* ── ① 号码逐个明细 ── */
+  /* ── 号码逐个明细 ── */
   h+='<div style="font-size:12px;font-weight:600;margin:8px 0 5px">号码明细</div>';
   if(isP){
     var PN=['百位','十位','个位'], ALL=[0,1,2,3,4,5,6,7,8,9];
@@ -6724,7 +6857,7 @@ function guessDetail(i){
     }
   }
 
-  /* ── ② 整注评估：与理论值对比 ── */
+  /* ── 整注评估：与理论值对比 ── */
   h+='<div style="font-size:12px;font-weight:600;margin:10px 0 5px">整注评估</div>';
   var cntList=[], curList=[], thC, thG;
   if(isP){
@@ -6774,7 +6907,7 @@ function guessDetail(i){
     +'⚠️ 「偏离理论值」只是描述这注的构成，<b>不意味着更容易或更不容易中奖</b>——'
     +'每个组合的概率始终相同。</div>';
 
-  /* ── ③ 历史最相近的一期 ── */
+  /* ── 历史最相近的一期 ── */
   var nr=guessNearest(g);
   h+='<div style="font-size:12px;font-weight:600;margin:10px 0 5px">历史最相近的一期</div>';
   if(nr&&nr.best&&nr.best.k>=0){
@@ -6813,7 +6946,7 @@ function guessDetail(i){
   h+='<div class="note" style="margin-top:6px">这是<b>已发生事实</b>的统计，回答的是'
     +'「这注在历史上离中奖有多远」，<b>不代表下期更可能中</b>。</div>';
 
-  /* ── ④ 形态逐项明细 ── */
+  /* ── 形态逐项明细 ── */
   var mf=g._m;
   h+='<div style="font-size:12px;font-weight:600;margin:10px 0 5px">形态明细</div>';
   if(mf){
@@ -6854,7 +6987,7 @@ function guessDetail(i){
     h+='<div style="font-size:11px;color:var(--fg5)">暂无形态数据</div>';
   }
 
-  /* ── ⑤ 近 N 期重号矩阵：每期一行，列出重合几个、具体哪几个号 ── */
+  /* ── 近 N 期重号矩阵：每期一行，列出重合几个、具体哪几个号 ── */
   var rc=g._recent;
   h+='<div style="font-size:12px;font-weight:600;margin:10px 0 5px">近 '
     +((rc&&rc.N)||5)+' 期重号矩阵</div>';
@@ -6909,6 +7042,20 @@ function guessDetail(i){
       +'近几期开过的号与本注重合多寡，<b>不影响下期中奖概率</b>。</div>';
   }else{
     h+='<div style="font-size:11px;color:var(--fg5)">暂无近期开奖数据</div>';
+  }
+  /* 红球与蓝球重合明细（按位玩法没有蓝球） */
+  if(!isP && d.blueMax && (g.b||[]).length){
+    var _rr={}, _ov=[];
+    for(j=0;j<g.r.length;j++) _rr[g.r[j]]=1;
+    for(j=0;j<g.b.length;j++) if(_rr[g.b[j]]) _ov.push(pad(g.b[j]));
+    var _rbOK=(g._rbMode==='must')?_ov.length>0:((g._rbMode==='avoid')?_ov.length===0:true);
+    h+='<div style="font-size:11px;margin-top:5px;color:'+(_rbOK?'var(--fg5)':'#c33')+'">'
+      +esc(d.redLabel)+'与'+esc(d.blueLabel)+'重合：'
+      +(_ov.length?(_ov.join('、')+'（共 '+_ov.length+' 个）'):'无')
+      +(g._rbMode&&g._rbMode!=='any'
+         ? ' · '+(g._rbMode==='must'?'必须重合':'避开重合')+(_rbOK?' ✓ 达标':' ⚠ 未达标')
+         : '')
+      +'</div>';
   }
   return h;
 }
@@ -7032,15 +7179,42 @@ function renderGuess(){
    +'<b>福彩3D / 排列三</b>：只有 10 个数字，并集口径几乎不可能满足，'
    +'严格模式改用「同位命中 ≤ 1 且不复制近 '+rN+' 期任一期」；'
    +'默认模式为同位命中 ≤ '+rM+' 位。<b>按位玩法建议把「最多重合」设为 1</b>。</div>';
+  /* 蓝球 / 后区指定：按位玩法没有蓝球，自动隐藏 */
+  if(!isP && d.blueMax){ h+=guessBlueBar(d); h+=guessRBBar(d); }
+  /* 条件机选从「我的选号」合并到本页，默认收起，不占版面 */
+  h+='<div class="bar" style="margin-top:2px">'
+   +'<button class="mini" onclick="S.genOpen=!S.genOpen;render()">'
+   +'按条件机选（和值 / 奇偶 / 大小 / 三区）'+(S.genOpen?'▴':'▾')+'</button>'
+   +'<span style="font-size:11px;color:var(--fg5)">生成的注会存入「我的选号」</span></div>';
+  if(S.genOpen) h+=renderGen();
   h+='<div style="padding:0 12px 10px"><button class="more" onclick="guessRun()">'
    +(S.guessList?'换一批':'生成号码')+'</button></div>';
 
   var th=guessTheory();
   if(S.guessList&&S.guessList.length){
     var L=S.guessList;
+    var ba=S.guessBlueApplied, rbm=S.guessRBApplied||'any';
     h+='<div style="font-size:12px;color:var(--fg5);padding:0 12px 6px">'
       +'按「'+esc(guessStratName(strat))+'」生成 · '+esc(S.guessAt||'')
-      +' · 共 '+L.length+' 注</div>';
+      +' · 共 '+L.length+' 注'
+      +((ba&&ba.mode!=='auto')
+         ? ' · '+esc(d.blueLabel)+'：'+(ba.mode==='only'?'指定 ':'排除 ')+guessBluePad(ba.list)
+         : '')
+      +(rbm!=='any' ? ' · 红蓝重合：'+(rbm==='avoid'?'避开重合':'必须重合') : '')
+      +'</div>';
+    if(!isP && d.blueMax && rbm!=='any'){
+      var _rok=0, _rj, _rk, _rq, _rm, _rh;
+      for(_rj=0;_rj<L.length;_rj++){
+        _rm={}; _rh=0;
+        for(_rk=0;_rk<L[_rj].r.length;_rk++) _rm[L[_rj].r[_rk]]=1;
+        for(_rq=0;_rq<(L[_rj].b||[]).length;_rq++) if(_rm[L[_rj].b[_rq]]) _rh++;
+        if(rbm==='must'?_rh>0:_rh===0) _rok++;
+      }
+      h+='<div class="note">'+esc(d.redLabel)+'与'+esc(d.blueLabel)
+        +(rbm==='must'?'必须重合':'避开重合')+'：<b>'+_rok+'/'+L.length+' 注达标</b>'
+        +(rbm==='must'?'（重合的'+esc(d.redLabel)+'已描蓝边）':'')
+        +'。<b>这只是号码形态，不改变中奖概率</b>。</div>';
+    }
     if(L.length>1){
       var _all=true;
       for(var _z=0;_z<L.length;_z++) if(!(S.guessOpen&&S.guessOpen[_z])){ _all=false; break; }
@@ -7053,10 +7227,15 @@ function renderGuess(){
       h+='<div style="padding:8px 12px;border-top:1px solid var(--line)">';
       h+='<div style="display:flex;align-items:center;gap:4px;flex-wrap:nowrap">';
       h+='<span style="font-size:11px;color:var(--fg5);min-width:14px;flex-shrink:0">'+(i2+1)+'</span>';
-      for(j2=0;j2<g.r.length;j2++) h+='<span class="nb sm">'+pad(g.r[j2])+'</span>';
-      for(j2=0;j2<(g.b||[]).length;j2++) h+='<span class="nb sm b">'+pad(g.b[j2])+'</span>';
+      var _rbset={}; for(j2=0;j2<(g.b||[]).length;j2++) _rbset[g.b[j2]]=1;
+      for(j2=0;j2<g.r.length;j2++)
+        h+='<span class="nb sm'+((rbm==='must'&&_rbset[g.r[j2]])?' rbhit':'')+'">'+pad(g.r[j2])+'</span>';
+      for(j2=0;j2<(g.b||[]).length;j2++)
+        h+='<span class="nb sm b'+(g._bluePinned?' pin':'')+'">'+pad(g.b[j2])+'</span>';
       var _op=!!(S.guessOpen&&S.guessOpen[i2]);
-      h+='<button class="mini" style="margin-left:auto" onclick="guessSave('+i2+')">保存</button>';
+      var _sv=!!(S.guessSaved&&S.guessSaved[i2]);
+      h+='<button class="mini" style="margin-left:auto'+(_sv?';color:#2a7':'')+'" title="存入我的选号" '
+        +'onclick="guessSave('+i2+')">'+(_sv?'已存入 ✓':'存入')+'</button>';
       h+='<button class="mini'+(g._ok?'':' warn')+'" onclick="guessToggle('+i2+')">'+(_op?'收起':'分析')+'</button>';
       h+='</div>';
       var mf=g._m;
@@ -7093,8 +7272,11 @@ function renderGuess(){
       +' ≤ '+rM+' 个）：<b>'+rOK+'/'+L.length+' 注达标</b>'
       +(rBad?('，'+rBad+' 注未完全达标（已取最接近的一注，点「分析」看逐期矩阵）'):'')
       +'。<b>这只是号码形态，不改变中奖概率</b>。</div>';
-    h+='<div class="note">号码可点「保存」进入「我的选号」，之后照常购买、核对。'
-      +'再次点「换一批」会得到<b>不同</b>的一组——这正是因为它本质是随机的。</div>';
+    var _saved=0, _sk;
+    for(_sk in (S.guessSaved||{})) if(S.guessSaved[_sk]) _saved++;
+    h+='<div class="note">号码可点「存入」进入「我的选号」，标记已买后才归档到选号记录'
+      +(_saved?('，本批已存入 <b>'+_saved+'</b> 注 <button class="mini" style="margin-left:6px" onclick="setTab(\'mine\')">去查看 →</button>'):'')
+      +'。再次点「换一批」会得到<b>不同</b>的一组——这正是因为它本质是随机的。</div>';
   }else{
     h+='<div class="empty">点上面的「生成号码」，按所选偏好生成一注或多注</div>';
   }
@@ -7155,23 +7337,21 @@ function renderGuess(){
 }
 
 var TABS=[
-  /* ② 开奖记录 + 号码走势 合并为「开奖历史」双视图：同一批数据、两种呈现（表格 / 走势图） */
+  /* 开奖历史：表格 / 走势图 双视图，同一批数据两种呈现 */
   {id:'hist',  name:'开奖历史', a:'renderHist',  b:'renderHist3'},
-  /* ① 出现次数 + 冷热分布 + 遗漏排行 合并为「号码统计」三视图（同一批数据、三种呈现） */
+  /* 号码统计：出现次数 / 冷热分布 / 遗漏排行 三视图 */
   {id:'stat',  name:'号码统计', a:'renderStat',  b:'renderStat3'},
-  /* ③ 区间分布独立成页签：原挂在冷热分布下，71 行比宿主 23 行还大，且读的是另一个池子 */
+  /* 区间分布：独立页签，按三分区统计 */
   {id:'zone',  name:'区间分布', a:'renderZone'},
-  /* ⑧ 蓝球 / 奖池 在福彩3D / 排列三下必然空白 → 按位玩法自动隐藏 */
+  /* 按位玩法没有蓝球、固定奖金没有奖池，这两个页签自动隐藏 */
   {id:'blue',  name:'蓝球分析', a:'renderBlue', hidePos:true},
   {id:'pool',  name:'奖池走势', a:'renderPool', hidePos:true},
-  /* ④ 我的选号 + 选号记录 合并：选号区在上，已保存记录紧跟其后 */
+  /* 我的选号：上半是选号区，下半是已保存记录 */
   {id:'mine',  name:'我的选号', a:'renderMine',  b:'renderMine3', extra:['renderRec']},
   {id:'fav',   name:'我的收藏', a:'renderFavTab'},
   {id:'check', name:'中奖核对', a:'renderCheck', b:'renderCheck3'},
   {id:'fsdt',  name:'复式/胆拖', a:'renderFsdt'},
-  /* ⑤ 数据自检：检查期号是否连续、有无缺口（CI 抓取可能静默失败） */
-  {id:'health',name:'数据自检', a:'renderHealth'},
-  /* ⑩ 猜号参考：按历史形态画像生成号码 + 多注反雷同；回放证明各偏好（含形态典型）≈随机 */
+  /* 猜号参考：按历史形态画像生成号码 + 多注反雷同 */
   {id:'guess', name:'猜号参考', a:'renderGuess'}
 ];
 function tabDef(id){ for(var i=0;i<TABS.length;i++) if(TABS[i].id===id) return TABS[i]; return null; }
@@ -7186,7 +7366,7 @@ function visibleTabs(){
   var P=isPos(), out=[], i;
   for(i=0;i<TABS.length;i++){
     var t=TABS[i];
-    if(t.hidePos && P) continue;      /* ⑧ 按位玩法隐藏必然空白的页签 */
+    if(t.hidePos && P) continue;      /* 按位玩法隐藏必然空白的页签 */
     out.push(t);
   }
   return out;
@@ -7199,7 +7379,7 @@ function renderTabs(){
     h+='<button id="t-'+t.id+'" class="'+(S.tab===t.id?'on':'')+'" onclick="setTab(\''+t.id+'\')">'+t.name+'</button>';
   }
   if(el.innerHTML!==h) el.innerHTML=h;
-  /* 待核对角标：单独更新这一个按钮，不重建整条页签栏（④ 已挂在合并后的「我的选号」上） */
+  /* 待核对角标：单独更新这一个按钮，不重建整条页签栏 */
   var pc=pendCheckCount(), tr=document.getElementById('t-mine');
   if(tr){
     var want='我的选号'+(pc?'<span class="tabdot">'+pc+'</span>':'');
@@ -7208,13 +7388,13 @@ function renderTabs(){
 }
 function render(){
   /* 未激活授权时直接显示锁屏，不渲染任何数据 */
-  if(licBlocked()){ var ml=$('main'); if(ml) ml.innerHTML=renderLock(); licInitMenu(); return; }
+  if(licBlocked()){ var ml=$('main'); if(ml) ml.innerHTML=renderLock(); renderLockChrome(); licInitMenu(); return; }
   if(!D[S.lot]){showLoading();return}
   ['ssq','dlt','3d','pls'].forEach(function(l){
     var b=$('b-'+l); if(b) b.className = S.lot===l?'on':'';
   });
   renderTabs();
-  /* ② 合并后旧页签 id（list/trend/rec）不再存在，回退到第一个可见页签，避免空白 */
+  /* 本机存下的页签 id 若已失效（老版本残留），回退到第一个可见页签，避免空白 */
   if(!tabDef(S.tab)){ var vt=visibleTabs(); S.tab = vt.length? vt[0].id : 'hist'; renderTabs(); }
   var m=$('main'), h=head()+latest();
   var P=isPos(), td=tabDef(S.tab), ei;
@@ -7259,7 +7439,7 @@ function warmAnalyze(){
   })();
 }
 function boot(){
-  if(licBlocked()){ var mb=$('main'); if(mb) mb.innerHTML=renderLock(); licInitMenu(); return; }
+  if(licBlocked()){ var mb=$('main'); if(mb) mb.innerHTML=renderLock(); renderLockChrome(); licInitMenu(); return; }
   ensure(S.lot).then(function(){
     render();
     setTimeout(warmAnalyze, 60);   /* 首屏出来后再预热，不拖慢首次渲染 */

@@ -19,6 +19,7 @@ cron 刷新脚本：抓取最新开奖数据 → 生成静态产物 + 单文件 
 特性：
   * 内容哈希比对：数据真的变了才写文件，避免 CI 空提交
   * 开奖日识别：非开奖日不做无谓轮询
+  * 本期已入库识别：本地最新一期的开奖日期就是今天时，不再等新期
   * 同时产出静态站 + 单文件版
 
 用法：
@@ -100,6 +101,35 @@ def baseline_issue(lot):
         return None
 
 
+def baseline_date(lot):
+    """仓库里已存的最新一期开奖日期（YYYY-MM-DD）"""
+    p = os.path.join(STATIC, "data", lot + ".json")
+    try:
+        with open(p, encoding="utf-8") as f:
+            return json.load(f)["rows"][-1][1]
+    except Exception:
+        return None
+
+
+def today_str(now=None):
+    return (now or beijing_now()).strftime("%Y-%m-%d")
+
+
+def already_has_today_draw(lot, now=None):
+    """本地是否已收录「今天应开的那一期」。
+
+    开奖日、且已过开奖时刻，若仓库最后一期的开奖日期 >= 今天，
+    说明当期已经抓到并入库，没有任何「等新期」的理由。
+    旧逻辑只看星期与时刻，会出现「本地已是 2026127、官方也是
+    2026127，却仍每 90 秒探测一次直到超时」的空转。
+    """
+    now = now or beijing_now()
+    if not (is_draw_day(lot, now) and past_draw_time(lot, now)):
+        return False
+    d = baseline_date(lot)
+    return bool(d and d >= today_str(now))
+
+
 def probe_latest(lot, crawler):
     """快速探测官方接口的最新期号（比全量抓取轻）"""
     try:
@@ -137,12 +167,16 @@ def should_poll(lot, now=None):
 def fetch_one(lot, crawler, poll_minutes=0, interval=90):
     """抓取单个彩种；如需轮询，则一直等到期号变化为止"""
     base = baseline_issue(lot)
+    base_date = baseline_date(lot)
     now = beijing_now()
-    log("%s: 本地最新期号 %s，北京时间 %s" %
-        (lot, base, now.strftime("%m-%d %H:%M")))
+    log("%s: 本地最新期号 %s（%s），北京时间 %s" %
+        (lot, base, base_date or "日期未知", now.strftime("%m-%d %H:%M")))
 
-    want_poll = poll_minutes > 0 and should_poll(lot, now)
-    if poll_minutes > 0 and not want_poll:
+    covered = already_has_today_draw(lot, now)
+    want_poll = poll_minutes > 0 and should_poll(lot, now) and not covered
+    if covered:
+        log("%s: 本期（%s）已入库，无需等待新期" % (lot, base_date))
+    elif poll_minutes > 0 and not want_poll:
         log("%s: 非开奖窗口，跳过轮询（今天是%s，开奖%s:%s）" %
             (lot, "周" + "一二三四五六日"[now.weekday()],
              DRAW_HOUR[lot], DRAW_MIN[lot]))
@@ -151,10 +185,22 @@ def fetch_one(lot, crawler, poll_minutes=0, interval=90):
     attempt = 0
     while True:
         attempt += 1
-        latest, _ = probe_latest(lot, crawler)
+        latest, probed = probe_latest(lot, crawler)
         got_new = latest is not None and latest != base
         if got_new:
             log("%s: 官方已出新期 %s（本地 %s）" % (lot, latest, base))
+            break
+        # 双保险：即使本地日期缺失或格式异常，只要官方最新一期的开奖
+        # 日期已经覆盖今天，就说明本期已开出且本地已收录，不该继续等。
+        probe_date = None
+        try:
+            if probed and probed.get("rows"):
+                probe_date = probed["rows"][-1][1]
+        except Exception:
+            pass
+        if latest and latest == base and probe_date and probe_date >= today_str(now):
+            log("%s: 官方最新 %s 即今日（%s）开出，本地已收录，停止等待"
+                % (lot, latest, probe_date))
             break
         if not want_poll or time.time() >= deadline:
             if latest:
