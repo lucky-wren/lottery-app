@@ -178,6 +178,7 @@ svg{display:block}
 .nb.sm{width:28px;height:28px;line-height:28px;font-size:12px;cursor:default;flex-shrink:0}
 .nb.sm.b.pin{box-shadow:0 0 0 2px rgba(43,108,212,.35);background:#eaf1ff;color:#184a9e;font-weight:700}
 .nb.sm.rbhit{box-shadow:0 0 0 2px rgba(43,108,212,.30);border-color:#5a92e0;color:#184a9e;font-weight:700}
+.nb.sm.b.rbhit{box-shadow:0 0 0 2px rgba(43,108,212,.45);border-color:#2b6cd4;background:#eaf1ff;color:#184a9e;font-weight:700}
 /* 冷 / 温 / 热三档：号码 + 遗漏胶囊 + 出现次数 */
 .zgrp{margin:8px 12px 0;padding:8px 10px;border-radius:10px;border-left:4px solid}
 .zgrp.cold{background:linear-gradient(90deg,rgba(59,111,212,.13),rgba(59,111,212,.02));border-left-color:#3b6fd4}
@@ -1167,8 +1168,8 @@ var S = {noApi:STATIC_BUILD, lot:'ssq', tab:'hist',
   /* 走势视图一次最多渲染多少期：再点下去 DOM 节点会撑爆手机 */
   trendNum:1, trendScope:'month', distLimit:20,
   fSort:{red:{k:1,dir:1}, blue:{k:1,dir:1}},
-  /* 蓝球分析：综合评分的排序条件，默认出现次数降序 */
-  blueSorts:[{k:'cnt',dir:-1}],
+  /* 蓝球分析：综合评分的排序条件，默认出现次数升序（次数少的号在前） */
+  blueSorts:[{k:'cnt',dir:1}],
   heatSort:'num',
   pickRed:[], pickBlue:[],
   /* 中奖核对 */
@@ -1211,6 +1212,8 @@ var S = {noApi:STATIC_BUILD, lot:'ssq', tab:'hist',
   favFilter:'all', favDelG:'',
   /* 猜号参考：红球与蓝球数字是否重合 / 本批已存入的注 */
   guessRB:'any', guessSaved:{},
+  /* 玩法详解默认收起，点开才渲染长文，不占版面 */
+  fsRulesOpen:false,
   /* 管理员签发授权码 */
   admUnit:'month', admVal:3, admN:1, admOut:[], admDev:''};
 
@@ -4440,6 +4443,7 @@ var HELP_SECTIONS=[
    '<ul><li>汇总卡、<b>冷 / 温 / 热三档</b>与完整表格；三档里大字是号码，'
    +'彩色胶囊是<b>当前遗漏期数</b>，下方小字是<b>累计出现次数</b></li>'
    +'<li><b>点表头加排序条件</b>，再点切升↑降↓，点 × 取消（最多 3 项）</li>'
+   +'<li><b>默认按出现次数升序</b>（次数少的在前），点「恢复默认」可回到该状态</li>'
    +'<li>各条件<b>等权综合打分</b>：如「出现次数↑＋当前遗漏↓」，次数少且遗漏久的号排最前</li></ul>'
   },
  {t:'奖池走势', b:
@@ -4475,6 +4479,7 @@ var HELP_SECTIONS=[
    +'<li>顶部用红字标出<b>共几注、多少钱</b>，付款前请再核对</li>'
    +'<li><b>缩水过滤</b>：按和值、奇偶、大小比、连号、重号等条件剔除不想要的组合，注数与金额同步下降</li>'
    +'<li>按位玩法为每位各选多个数字，注数＝三位的个数相乘</li>'
+   +'<li>页内「<b>玩法详解</b>」含注数公式、算例、胆拖为什么省钱与中奖对照，默认收起</li>'
    +'<li>⚠️ 复式与缩水只改变覆盖面，<b>不提高中奖概率</b></li></ul>'
   },
  {t:'猜号参考', b:
@@ -4489,7 +4494,8 @@ var HELP_SECTIONS=[
    +'各偏好都围绕理论值波动，<b>没有一种优于机选</b></li>'
    +'<li><b>蓝球 / 后区</b>可选「指定号码」或「排除号码」；按位玩法没有蓝球，自动隐藏</li>'
    +'<li><b>红球与蓝球重合</b>可选「不限 / 避开重合 / 必须重合」，每注都满足；'
-   +'与「指定号码」同时使用时，红球会包含或避开指定值</li>'
+   +'与「指定号码」同时使用时，红球会包含或避开指定值；'
+   +'凡是数字重合的球都会<b>描蓝边高亮</b>，选「不限」时也照样标出</li>'
    +'<li>每注点<b>「存入」</b>进入「我的选号」，按钮变「已存入 ✓」；标记已买后才归档到选号记录</li>'
    +'<li>「按条件机选」可按和值 / 奇偶 / 大小 / 三区生成；每注点<b>「存入」</b>进入「我的选号」</li>'
    +'<li>⚠️ 所有分析与约束都<b>不提高中奖概率</b></li></ul>'
@@ -5367,7 +5373,7 @@ function blueStat(){
    名次制不受个别极端值影响；并列取平均名次，从未开出的号得 0 分。
    S.blueSorts = [{k:字段, dir:1升序 / -1降序}, ...] */
 var BLUE_SORT_ORDER=['num','cnt','pct','cur','mx','gap','lastDate'];
-var BLUE_SORT_DEF={num:1,cnt:-1,pct:-1,cur:-1,mx:-1,gap:-1,lastDate:-1};
+var BLUE_SORT_DEF={num:1,cnt:1,pct:-1,cur:-1,mx:-1,gap:-1,lastDate:-1};
 var BLUE_SORT_NAME={num:'号码',cnt:'出现次数',pct:'占比',cur:'当前遗漏',
   mx:'最大遗漏',gap:'平均间隔',lastDate:'上次开出'};
 var BLUE_SORT_MARK=['①','②','③'];
@@ -5376,10 +5382,10 @@ function blueSortKeys(){
   /* 兼容旧的单列状态：显式设置 S.blueSort 时重置为单列 */
   if(S.blueSort){
     var old=S.blueSort;
-    S.blueSorts=[{k:old, dir:old==='num'?1:-1}];
+    S.blueSorts=[{k:old, dir:(old==='num'||old==='cnt')?1:-1}];
     delete S.blueSort;
   }
-  if(!S.blueSorts || !S.blueSorts.length) S.blueSorts=[{k:'cnt',dir:-1}];
+  if(!S.blueSorts || !S.blueSorts.length) S.blueSorts=[{k:'cnt',dir:1}];
   /* 综合分等权平均，与条件先后无关；按列顺序归一只为表头角标稳定 */
   S.blueSorts.sort(function(a,b){return blueSortIdx(a.k)-blueSortIdx(b.k)});
   return S.blueSorts;
@@ -5458,13 +5464,13 @@ function blueSortSet(k){
 function blueSortRemove(k){
   var ks=blueSortKeys(), i;
   for(i=0;i<ks.length;i++) if(ks[i].k===k){ ks.splice(i,1); break; }
-  if(!ks.length) ks.push({k:'cnt',dir:-1});   /* 至少保留一个条件 */
+  if(!ks.length) ks.push({k:'cnt',dir:1});   /* 至少保留一个条件 */
   S.blueSortHint='';
   delete S.blueSort;
   render();
 }
 function blueSortReset(){
-  S.blueSorts=[{k:'cnt',dir:-1}];
+  S.blueSorts=[{k:'cnt',dir:1}];
   S.blueSortHint='';
   delete S.blueSort;
   render();
@@ -5583,6 +5589,7 @@ function renderBlue(){
   h+='</tbody></table></div>';
   h+='<div class="note"><b>点表头加条件</b>，再点切升↑降↓，点 × 取消（最多 3 项）；'
     +'各条件等权折算成综合分，越高越靠前。'
+    +'<b>默认按出现次数升序</b>（次数少的号在前），点「恢复默认」可回到这个状态。'
     +'<b>当前遗漏</b>=距上次开出连续多少期没出；<b>平均间隔</b>=总期数÷出现次数。</div></div>';
   return h;
 }
@@ -5834,7 +5841,7 @@ function fsdtPos(d){
       h+='</div></div>';
     }
     h+='<div class="betops" style="margin:10px 12px 0">'
-      +'<button onclick="S.fs3=[[],[],[]];render()">清空</button>'
+      +'<button onclick="fsManualClear()">清空</button>'
       +'<button onclick="fsCopy()">复制号码</button></div></div>';
   return h;
 }
@@ -5873,15 +5880,148 @@ function fsdtRedBlue(d){
       h+='<span class="nb b'+(S.fsBlue.indexOf(e)>=0?' sel':'')+'" onclick="toggleFs(S.fsBlue,'+e+')">'+pad(e)+'</span>';
     h+='</div></div>';
     h+='<div class="betops" style="margin:10px 12px 0">'
-      +'<button onclick="S.fsRed=[];S.fsBlue=[];S.fsDan=[];S.fsTuo=[];render()">清空</button>'
+      +'<button onclick="fsManualClear()">清空</button>'
       +'<button onclick="fsCopy()">复制号码</button></div></div>';
   return h;
 }
+/* 号码盘手工清空 */
+function fsManualClear(){
+  S.fsRed=[];S.fsBlue=[];S.fsDan=[];S.fsTuo=[];S.fs3=[[],[],[]];
+  render();
+}
+/* ═════════ 复式 / 胆拖：玩法详解 ═════════
+   默认收起，展开后按当前彩种与当前投注方式给出规则、注数公式、
+   带数字的算例、中奖对照和常见误区。
+   算例里的组合数一律用 C() 现算，避免把算错的数字写死在文案里；
+   奖级表直接复用 prizeRows()，与「中奖核对」页保持同一份数据。 */
+function fsdtRuleSec(title, body){
+  return '<div class="sec">'+esc(title)+'</div>'
+    +'<div class="note" style="padding:0 12px 10px">'+body+'</div>';
+}
+function fsdtPrizeTable(){
+  var P=isPos(), rows=[], i, h;
+  if(P){
+    rows=[['三位数字与顺序完全相同','直选','1040 元'],
+          ['数字相同、顺序不限（有两个相同）','组选三','346 元'],
+          ['数字相同、顺序不限（三个各不相同）','组选六','173 元']];
+  }else{
+    var rs=prizeRows(S.lot);
+    for(i=0;i<rs.length;i++) rows.push([rs[i][0],rs[i][1],rs[i][2]]);
+  }
+  h='<div class="scroll"><table><thead><tr><th>'+(P?'中奖条件':'中球（红＋蓝）')
+   +'</th><th>奖级</th><th>单注奖金</th></tr></thead><tbody>';
+  for(i=0;i<rows.length;i++)
+    h+='<tr><td>'+esc(rows[i][0])+'</td><td>'+esc(rows[i][1])+'</td><td>'+esc(rows[i][2])+'</td></tr>';
+  h+='</tbody></table></div>';
+  h+='<div class="note" style="padding:4px 0 0">'
+    +(P?'固定奖玩法，奖金不随销量浮动；'
+        :(S.lot==='dlt'?'一 / 二 / 三等奖':'一 / 二等奖')+'为浮动奖，每期金额不同。')
+    +'复式票会拆成若干单式注逐注对奖，一张票可能同时中多个奖级，奖金累加。'
+    +'以上为常规奖级，<b>具体以官方公告为准</b>。</div>';
+  return h;
+}
+function fsdtRules(d){
+  var P=isPos(), h='';
+  h+='<div class="card"><div class="bar"><label>玩法详解</label>'
+   +'<button class="mini" onclick="S.fsRulesOpen=!S.fsRulesOpen;render()">'
+   +(S.fsRulesOpen?'收起 ▴':'展开 ▾')+'</button></div>';
+  if(!S.fsRulesOpen){
+    h+='<div class="note" style="padding:0 12px 10px">注数怎么算、胆拖为什么省钱、'
+      +'缩水会丢掉什么、中奖怎么对照，以及常见误区。点「展开」查看，不占版面。</div></div>';
+    return h;
+  }
+  var rn=d.redCount, bn=d.blueCount, rl=esc(d.redLabel), bl=esc(d.blueLabel);
+  var r=fsCalc();
+  var live=r.ok
+    ? '<div class="bres" style="margin:0 0 8px">当前选号：<b>'+r.notes+' 注 / '
+        +moneyFull(r.amt)+' 元</b><br>'+esc(r.msg)+'</div>'
+    : '<div class="bres" style="margin:0 0 8px">当前还没选够号码：'+esc(r.msg)+'</div>';
+
+  if(P){
+    /* ── 按位玩法：福彩3D / 排列三 ── */
+    var ex=[2,3,2], exN=ex[0]*ex[1]*ex[2];
+    h+=fsdtRuleSec('一、一注是什么',
+      '<b>百位 / 十位 / 个位</b>各选 1 个数字（0-9，<b>可重复</b>），顺序固定，每注 2 元。'
+      +'<br>例如 <b>1 2 3</b> 与 <b>3 2 1</b> 是两注不同的号码；<b>1 1 2</b> 也是合法的一注。');
+    h+=fsdtRuleSec('二、直选复式的注数怎么算',
+      '每位都可以多选，系统把三位数字能组成的<b>所有直选组合</b>各买一注：'
+      +'<br><b>注数 = 百位个数 × 十位个数 × 个位个数</b>，<b>金额 = 注数 × 2 元</b>。'
+      +'<br><b>算例</b>：百位 '+ex[0]+' 个 × 十位 '+ex[1]+' 个 × 个位 '+ex[2]+' 个 = '
+      +'<b>'+exN+' 注</b>，'+exN*2+' 元。每多勾一个数字，注数是<b>相乘</b>地涨，不是相加。'
+      +live);
+    h+=fsdtRuleSec('三、本页只做「直选」',
+      '<b>直选</b>：三位数字与顺序完全相同才算中。'
+      +'<br><b>组选六</b>：三个数字各不相同，顺序不限，一组号码覆盖 6 种排列；'
+      +'<b>组选三</b>：有两个数字相同，顺序不限，覆盖 3 种排列。'
+      +'<br>本页按位复式生成的是<b>直选注</b>；想买组选需到投注站按对应玩法投注，'
+      +'注数与奖金规则都不同，别拿这里的注数去套。');
+    h+=fsdtRuleSec('四、缩水过滤',
+      '开启「缩水过滤」后，按<b>和值范围、跨度范围、形态（豹子 / 组三 / 组六）</b>'
+      +'把不符合的组合剔掉，注数与金额同步下降。'
+      +'<br>⚠️ 缩水只是少买几注，<b>不改变每一注的中奖概率</b>；被剔掉的注如果正好开出来，不会补给你。');
+  }else{
+    /* ── 选号型玩法：双色球 / 大乐透 ── */
+    var exR=rn+2, exB=bn+1;
+    var exC1=C(exR,rn), exC2=C(exB,bn), exN2=exC1*exC2;
+    var exDan=2, exTuo=rn, exNeed=rn-exDan, exDanN=C(exTuo,exNeed)*C(bn,bn);
+    h+=fsdtRuleSec('一、单式、复式、胆拖是什么',
+      '<b>单式</b>：'+rl+'选 '+rn+' 个、'+bl+'选 '+bn+' 个，组成 1 注，2 元。'
+      +'<br><b>复式</b>：'+rl+'选超过 '+rn+' 个，或'+bl+'选超过 '+bn+' 个，'
+      +'系统把这些号码能组成的<b>所有单式</b>一次买齐。'
+      +'<br><b>胆拖</b>：先定几个<b>胆码</b>（每一注都包含），再从<b>拖码</b>里凑够剩下的位置；'
+      +'只有'+rl+'能分胆拖，'+bl+'仍按普通复式计算。');
+    h+=fsdtRuleSec('二、复式的注数怎么算',
+      '<b>注数 = C('+rl+'个数, '+rn+') × C('+bl+'个数, '+bn+')</b>，'
+      +'<b>金额 = 注数 × 2 元</b>。C(n,k) 是从 n 个号里取 k 个的组合数。'
+      +'<br><b>算例</b>：'+rl+' '+exR+' 个 → C('+exR+','+rn+')='+exC1+' 组，'
+      +bl+' '+exB+' 个 → C('+exB+','+bn+')='+exC2+' 组，'
+      +'共 <b>'+exN2+' 注</b>，'+exN2*2+' 元。'
+      +'<br>每组'+rl+'都要和每组'+bl+'配一次，所以'+bl+'多选 1 个，注数是<b>成倍</b>增加。'
+      +live);
+    h+=fsdtRuleSec('三、胆拖的注数怎么算',
+      '设胆码 <b>d</b> 个、拖码 <b>t</b> 个，还差 <b>'+rn+'−d</b> 个由拖码补：'
+      +'<br><b>注数 = C(t, '+rn+'−d) × C('+bl+'个数, '+bn+')</b>，金额 = 注数 × 2 元。'
+      +'<br>限制：<b>1 ≤ d ≤ '+(rn-1)+'</b>（胆码不能凑满一注）、<b>d + t ≥ '+rn+'</b>、'
+      +'胆码与拖码<b>不能是同一个号</b>。'
+      +'<br><b>算例</b>：胆码 '+exDan+' 个 + 拖码 '+exTuo+' 个 + '+bl+' '+bn+' 个 → '
+      +'补 '+exNeed+' 个 → C('+exTuo+','+exNeed+')='+C(exTuo,exNeed)+' → '
+      +'<b>'+exDanN+' 注</b>，'+exDanN*2+' 元。'
+      +'<br>同样这 '+(exDan+exTuo)+' 个'+rl+'做全复式是 C('+(exDan+exTuo)+','+rn+')='
+      +C(exDan+exTuo,rn)+' 注、'+C(exDan+exTuo,rn)*2+' 元，'
+      +'胆拖省 <b>'+(C(exDan+exTuo,rn)*2-exDanN*2)+' 元</b>。'
+      +'<br><b>为什么省钱</b>：胆码锁死「每注必含」，只组合剩下的位置，组合数自然变小。'
+      +'<br><b>代价</b>：胆码一旦没中，这整张票里就没有任何一注能中高奖'
+      +'（因为每注都带着它），别把全部预算压在少数几个胆码上。');
+    h+=fsdtRuleSec('四、缩水过滤',
+      '开启后按<b>和值、奇数个数、大号个数、最长连号、与上期重号个数</b>'
+      +'把不符合的组合剔掉，注数与金额同步下降。'
+      +'<br>⚠️ 缩水只是少买几注，<b>不改变每一注的中奖概率</b>；被剔掉的注也可能就是中奖的那注。');
+  }
+  /* 中奖对照（两种玩法共用） */
+  h+='<div class="sec">五、中奖对照</div>'
+    +'<div style="padding:0 12px 10px">'+fsdtPrizeTable()+'</div>';
+  /* 操作与误区 */
+  h+=fsdtRuleSec('六、怎么操作',
+    '① 在上方号码盘点选号码 → ② 用顶部按钮切<b>复式 / 胆拖 / 缩水</b> → '
+    +'③ 看「投注金额」卡确认共几注、多少钱 → ④ 点「复制号码」把结果带走，'
+    +'到投注站按<b>复式票</b>投注即可，不需要把每注单式逐个打出来。'
+    +'<br>本站只做号码组合与金额计算，<b>不出票、不代购</b>。');
+  h+=fsdtRuleSec('七、常见误区',
+    '<b>① 复式不提高单注中奖率</b>：它只是把多注单式一次买齐，'
+    +'覆盖面变大、花钱变多，但每一注的中奖概率完全相同，数学期望不变。'
+    +'<br><b>② 号码池越大越贵</b>：组合数增长很快，付款前一定看金额卡。'
+    +'<br><b>③ 缩水会漏奖</b>：被过滤掉的组合照样可能开出。'
+    +(P?'<br><b>④ 顺序很重要</b>：按位玩法 123 与 321 不是同一注。'
+        :'<br><b>④ 胆码是双刃剑</b>：省钱的代价是胆码错了整组票就无缘高奖。')
+    +'<br><b>⑤ 冷温热、走势、遗漏都只是已开奖结果的统计</b>，不具备预测能力。理性购彩，量力而行。');
+  h+='</div>';
+  return h;
+}
 function renderFsdt(){
-  var d=D[S.lot], h='';
+  var d=D[S.lot], h='', P=isPos();
   var r=fsCalc();
   /* 号码盘：按玩法分派到独立函数 */
-  h += isPos() ? fsdtPos(d) : fsdtRedBlue(d);
+  h += P ? fsdtPos(d) : fsdtRedBlue(d);
 
   /* 结果 */
   h+='<div class="card"><div class="sec">投注金额</div>';
@@ -5918,11 +6058,7 @@ function renderFsdt(){
   h+='</div>';
   if(S.fsMode==='shrink') S.fsShrink=true;
   h+=fsShrinkCard(r);
-  h+='<div class="card"><div class="sec">说明</div><div class="note" style="padding:0 12px 10px">'
-    +'<b>复式</b>：选出比单式更多的号码，覆盖这些号码的所有组合。<br>'
-    +'<b>胆拖</b>：胆码是每注都包含的号码，拖码用来补足剩余位置，比全复式省钱。<br>'
-    +'两者<b>只改变覆盖面，不改变中奖概率的数学期望</b>——花得越多，覆盖的组合越多，'
-    +'但每注的中奖概率完全相同。请量力而行。</div></div>';
+  h+=fsdtRules(d);
   return h;
 }
 
@@ -5933,7 +6069,8 @@ function setLot(l){
   S.pSort={k:1,dir:-1};S.pick3=[null,null,null];S.chk3=[null,null,null];S.fs3=[[],[],[]];
   S.trendWin3='d10';
   S.fSort3={p0:{k:1,dir:1}, p1:{k:1,dir:1}, p2:{k:1,dir:1}};
-  S.fsRed=[];S.fsBlue=[];S.fsDan=[];S.fsTuo=[];S.recDel=-1;S.recClear=false;
+  S.fsRed=[];S.fsBlue=[];S.fsDan=[];S.fsTuo=[];
+  S.recDel=-1;S.recClear=false;
   S.cart=[];S.simMsg='';   /* 换彩种后勾选作废，避免号码 key 跨玩法撞车 */
   boot();
 }
@@ -7055,7 +7192,7 @@ function guessDetail(i){
     var _rbOK=(g._rbMode==='must')?_ov.length>0:((g._rbMode==='avoid')?_ov.length===0:true);
     h+='<div style="font-size:11px;margin-top:5px;color:'+(_rbOK?'var(--fg5)':'#c33')+'">'
       +esc(d.redLabel)+'与'+esc(d.blueLabel)+'重合：'
-      +(_ov.length?(_ov.join('、')+'（共 '+_ov.length+' 个）'):'无')
+      +(_ov.length?(_ov.join('、')+'（共 '+_ov.length+' 个，已描蓝边）'):'无')
       +(g._rbMode&&g._rbMode!=='any'
          ? ' · '+(g._rbMode==='must'?'必须重合':'避开重合')+(_rbOK?' ✓ 达标':' ⚠ 未达标')
          : '')
@@ -7216,8 +7353,19 @@ function renderGuess(){
       }
       h+='<div class="note">'+esc(d.redLabel)+'与'+esc(d.blueLabel)
         +(rbm==='must'?'必须重合':'避开重合')+'：<b>'+_rok+'/'+L.length+' 注达标</b>'
-        +(rbm==='must'?'（重合的'+esc(d.redLabel)+'已描蓝边）':'')
-        +'。<b>这只是号码形态，不改变中奖概率</b>。</div>';
+        +(rbm==='must'?'（重合的球已描蓝边）':'')
+         +'。<b>这只是号码形态，不改变中奖概率</b>。</div>';
+    }
+    if(!isP && d.blueMax && rbm==='any'){
+      var _ah=0, _ai, _ak, _aq, _am;
+      for(_ai=0;_ai<L.length;_ai++){
+        _am={};
+        for(_ak=0;_ak<L[_ai].r.length;_ak++) _am[L[_ai].r[_ak]]=1;
+        for(_aq=0;_aq<(L[_ai].b||[]).length;_aq++)
+          if(_am[L[_ai].b[_aq]]){ _ah++; break; }
+      }
+      if(_ah) h+='<div class="note">本批 '+_ah+'/'+L.length+' 注出现'+esc(d.redLabel)
+        +'与'+esc(d.blueLabel)+'数字重合，重合的球已<b>描蓝边</b>标出。</div>';
     }
     if(L.length>1){
       var _all=true;
@@ -7231,11 +7379,14 @@ function renderGuess(){
       h+='<div style="padding:8px 12px;border-top:1px solid var(--line)">';
       h+='<div style="display:flex;align-items:center;gap:4px;flex-wrap:nowrap">';
       h+='<span style="font-size:11px;color:var(--fg5);min-width:14px;flex-shrink:0">'+(i2+1)+'</span>';
+      /* 只要数字实际重合就描蓝边，与「重合」下拉选了什么无关：
+         选「不限」时也会自然撞上，用户需要一眼看出是哪几个号。 */
       var _rbset={}; for(j2=0;j2<(g.b||[]).length;j2++) _rbset[g.b[j2]]=1;
       for(j2=0;j2<g.r.length;j2++)
-        h+='<span class="nb sm'+((rbm==='must'&&_rbset[g.r[j2]])?' rbhit':'')+'">'+pad(g.r[j2])+'</span>';
+        h+='<span class="nb sm'+(_rbset[g.r[j2]]?' rbhit':'')+'">'+pad(g.r[j2])+'</span>';
+      var _rrset={}; for(j2=0;j2<g.r.length;j2++) _rrset[g.r[j2]]=1;
       for(j2=0;j2<(g.b||[]).length;j2++)
-        h+='<span class="nb sm b'+(g._bluePinned?' pin':'')+'">'+pad(g.b[j2])+'</span>';
+        h+='<span class="nb sm b'+(_rrset[g.b[j2]]?' rbhit':'')+(g._bluePinned?' pin':'')+'">'+pad(g.b[j2])+'</span>';
       var _op=!!(S.guessOpen&&S.guessOpen[i2]);
       var _sv=!!(S.guessSaved&&S.guessSaved[i2]);
       h+='<button class="mini" style="margin-left:auto'+(_sv?';color:#2a7':'')+'" title="存入我的选号" '
