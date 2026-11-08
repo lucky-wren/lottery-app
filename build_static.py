@@ -102,7 +102,7 @@ def build_html():
     except Exception as e:      # noqa
         log("PWA 资源写入失败（不影响主功能）: %s" % e)
     # 构建期内置：优先 --proxy，其次环境变量 LOTTERY_PROXY（CI Secret）。
-    # 页面不再读取 proxy.json，地址只作为构建期常量写入产物。
+    # 页面优先读本机 / 站点 proxy.json，内置常量作为兜底代理来源。
     px = ""
     for a in sys.argv[1:]:
         if a.startswith("--proxy="):

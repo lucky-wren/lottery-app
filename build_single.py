@@ -2,10 +2,11 @@
 """
 生成「自包含单文件 HTML」到 dist/单文件版/彩票统计.html
 
-特点：数据直接烤进 HTML，**不发起任何网络请求**。
+特点：数据直接烤进 HTML，**正常阅读零网络请求**。
      → 不依赖后端、不依赖 data/*.json
      → 双击就能看，也可以直接把这一个文件发给别人
      → 彻底避开云平台「非 HTML 请求被强制下载」的限制
+     → 菜单「数据更新」的手动更新由使用者主动触发，才会请求官方接口
 
 用法:
     python3 build_single.py             # 用已有数据生成（快）
@@ -14,7 +15,7 @@
 
 云端自动更新：仓库 Secret LOTTERY_PROXY 在 CI 里注入同名环境变量，
 抓取脚本用它转发官方请求，本脚本把它作为构建期常量写入产物。
-页面本身不发起取数请求，也不需要运行期配置。
+页面正常阅读不发请求；手动更新的代理地址支持运行期配置，内置常量只作兜底。
 """
 import os
 import sys
@@ -187,7 +188,7 @@ def build():
               "  if(typeof EMBEDDED_META==='undefined'||!EMBEDDED_META) return;\n"
               "  var realFetch = window.fetch ? window.fetch.bind(window) : null;\n"
               "  window.fetch = function(url, opt){\n"
-              "    var m = /(ssq|dlt|3d|pls)/.exec(String(url==null?'':url));\n"
+              "    var m = /^\\.\\/data\\/(ssq|dlt|3d|pls)\\.json(?:\\?|$)/.exec(String(url==null?'':url));\n"
               "    if(m && EMBEDDED_META[m[1]]){\n"
               "      var d = embeddedLoad(m[1]);\n"
               "      if(d) return Promise.resolve({\n"
@@ -246,7 +247,7 @@ def build():
     var ed = embeddedLoad(lot);
     if(ed && ed.rows && ed.rows.length){
       ed.embedded = true; ed.staticMode = true;
-      D[lot] = ed;                  /* 关键：必须写入 D，否则 render() 读不到 */
+      D[lot] = ed; if(typeof OU!=='undefined') OU.replay(lot);
       return Promise.resolve(ed);
     }
   }

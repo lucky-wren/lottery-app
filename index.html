@@ -396,6 +396,7 @@ body.dark .toastbox{background:rgba(240,240,240,.94);color:#1a1a1a}
     <div class="sidehead">菜单<span onclick="closeSide()">×</span></div>
     <div class="sideitem" onclick="closeSide();showHelp()">功能说明<em>各页面怎么看</em></div>
     <div class="sideitem" onclick="closeSide();showSource()">数据来源<em>官方接口</em></div>
+    <div class="sideitem" onclick="closeSide();refreshData()">数据更新<em>手动补齐最新期</em></div>
     <div class="sideitem" onclick="closeSide();showPwa()">添加到桌面<em>像 App 一样打开</em></div>
     <div class="sideitem" onclick="closeSide();toggleTheme()">显示模式<em id="m-theme">浅色</em></div>
     <div id="side-lic" class="sideitem" onclick="closeSide();licShowInfo()" style="display:none">访问授权<em id="m-lic"></em></div>
@@ -1221,7 +1222,7 @@ function $(id){return document.getElementById(id)}
 /* 期号短标：双色球 2026122→26122，大乐透 26121→26121，统一 5 位，避免两者混淆 */
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 /* 用于属性（value="..."）的转义：比 esc 多处理引号，避免输入内容截断属性 */
-function escA(s){return esc(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
+function escA(s){return esc(s)}
 function pad(n){return n<10?'0'+n:''+n}
 /* 列表渲染上限，防止一路「加载更多」把手机卡死 */
 var LIST_MAX=600, DIST_MAX=200;
@@ -1306,7 +1307,7 @@ function load(lot, force){
     return api('/history?lot='+lot+(force?'&force=1':''));
   }).then(function(d){
     if(!d || !d.rows || !d.rows.length) throw new Error('空数据');
-    D[lot]=d; lcWrite(lot,d); return d;
+    D[lot]=d; if(typeof OU!=='undefined') OU.replay(lot); lcWrite(lot,d); return d;
   });
 }
 function ensure(lot){
@@ -1315,7 +1316,7 @@ function ensure(lot){
   if(typeof EMBEDDED_META==='undefined'){
     var c=lcRead(lot);
     if(c){
-      D[lot]=c;
+      D[lot]=c; if(typeof OU!=='undefined') OU.replay(lot);
       try{ render(); }catch(e){}
       load(lot).then(function(d){
         if(lcStamp(d)!==lcStamp(c)){ D[lot]=d; lcWrite(lot,d); if(S.lot===lot){ try{ render(); }catch(e){} } }
@@ -4348,10 +4349,382 @@ function renderMine(){
 /* ---------- 侧边栏 ---------- */
 function openSide(){ $('side').className='sidemask on'; }
 function closeSide(){ $('side').className='sidemask'; }
-/* ================= 数据加载 =================
-   开奖数据由构建流程写入本页，打开时不发起取数请求。
-   PX_BUILTIN 由构建期注入并留在产物中，页面不读取。 */
-var PX_BUILTIN='';
+/* ================= 手动更新（浏览器直连 / 云代理转发） =================
+   与云端定时抓取并存：定时抓取负责把新数据烤进产物；这里让使用者点一下就补齐最新期。
+   体彩官方接口开放跨域，可直接请求；福彩接口不开放跨域，经境内云函数 ?url= 转发。
+   代理来源优先级：本机（管理员填写）> 站点 proxy.json > 构建期内置。
+   普通用户只读来源提示，看不到输入框；管理员配置后导出 proxy.json 即可对所有人生效。
+   全部状态与内部方法收在 OU 一个对象里，对外只暴露交互所需的桥接函数。 */
+var OU = (function(){
+  var LKEY='lottery_ou_proxy', PKEY='lottery_ou_patch_';
+  var N=30, TIMEOUT=12000, MAXPATCH=400;
+  var BUILTIN='';
+  var remote='', remoteAt='', busy=false;
+  var ORDER=['dlt','pls','ssq','3d'];
+  var DEF={
+    dlt:{name:'大乐透', proxy:false, url:function(){ return tcUrl('85'); }},
+    pls:{name:'排列三', proxy:false, url:function(){ return tcUrl('35'); }},
+    ssq:{name:'双色球', proxy:true,  url:function(){ return fcUrl('ssq'); }},
+    '3d':{name:'福彩3D', proxy:true,  url:function(){ return fcUrl('3d'); }}
+  };
+  function tcUrl(g){
+    return 'https://webapi.sporttery.cn/gateway/lottery/getHistoryPageListV1.qry?gameNo='+g
+      +'&provinceId=0&pageSize='+N+'&isVerify=1&pageNo=1';
+  }
+  function fcUrl(p){
+    return 'https://www.cwl.gov.cn/cwl_admin/front/cwlkj/search/kjxx/findDrawNotice?name='+p
+      +'&issueCount='+N;
+  }
+  function cmpNum(a,b){ return a-b; }
+  function isInt(v,lo,hi){
+    return typeof v==='number' && isFinite(v) && Math.floor(v)===v && v>=lo && v<=hi;
+  }
+  /* 代理地址规范化：去空白、剔除误粘贴的 ?url= 尾巴、只接受 http(s) */
+  function norm(v){
+    v=String(v==null?'':v).trim();
+    if(!v) return '';
+    v=v.replace(/[?&]url=.*$/i,'').replace(/[?&]$/,'');
+    return /^https?:\/\//i.test(v)?v:'';
+  }
+  function local(){ try{ return norm(localStorage.getItem(LKEY)); }catch(e){ return ''; } }
+  function hasLocal(){ return !!local(); }
+  function setLocal(v){
+    try{ v=norm(v); if(v) localStorage.setItem(LKEY,v); else localStorage.removeItem(LKEY); }catch(e){}
+  }
+  function builtin(){ return norm(BUILTIN.indexOf('@@')===0?'':BUILTIN); }
+  function proxy(){ var v=local(); if(v) return v; v=norm(remote); if(v) return v; return builtin(); }
+  function source(){
+    if(local()) return 'local';
+    if(norm(remote)) return 'remote';
+    if(builtin()) return 'builtin';
+    return '';
+  }
+  /* 站点配置：网址版启动时读取一次，打开面板再读一次（授权激活后也会重进面板） */
+  function loadRemote(cb){
+    function fin(){ if(cb) try{ cb(); }catch(e){} }
+    try{
+      if(!window.fetch || !/^https?:$/.test(location.protocol)){ fin(); return; }
+      fetch('proxy.json?t='+Date.now(),{cache:'no-store'})
+        .then(function(r){ return r.ok?r.json():null; })
+        .then(function(j){
+          var v=j&&j.proxy?norm(j.proxy):'';
+          if(v){ remote=v; remoteAt=String(j.updated||'').trim(); }
+          else { remote=''; remoteAt=''; }
+          fin();
+        }).catch(function(){ fin(); });
+    }catch(e){ fin(); }
+  }
+  function sourceHtml(){
+    var k=source();
+    if(!k) return '<span style="color:#c98a00">福彩数据尚未配置云代理，可先只更新体彩</span>';
+    var t=(k==='local')?'（本机）'
+        :(k==='remote')?('（站点配置'+(remoteAt?' · '+esc(remoteAt):'')+'）'):'（内置）';
+    return '<b style="color:#1a9c46">已配置云代理</b>'+t+'，可更新全部彩种';
+  }
+  /* 统一请求层：超时、状态码、错误归一化，避免每个接口各写一套 try/catch */
+  function getText(url, viaProxy){
+    var target=url;
+    if(viaProxy){
+      var p=proxy();
+      if(!p) return Promise.reject({code:'NO_PROXY',msg:'未配置云代理'});
+      target=p+(p.indexOf('?')>=0?'&':'?')+'url='+encodeURIComponent(url);
+    }
+    return new Promise(function(resolve,reject){
+      var done=false;
+      var timer=setTimeout(function(){
+        if(done) return; done=true; reject({code:'TIMEOUT',msg:'请求超时'});
+      },TIMEOUT);
+      function fail(e){
+        if(done) return; done=true; clearTimeout(timer);
+        if(e&&e.code) reject(e); else reject({code:'NETWORK',msg:(e&&e.message)||'网络请求失败'});
+      }
+      try{
+        fetch(target,{cache:'no-store'}).then(function(r){
+          if(done) return;
+          if(!r.ok) throw {code:'HTTP',msg:'HTTP '+r.status};
+          return r.text();
+        }).then(function(txt){
+          if(done) return; done=true; clearTimeout(timer); resolve(txt);
+        }).catch(fail);
+      }catch(e){ fail(e); }
+    });
+  }
+  /* 严格校验：号码个数、范围、期号、日期，任何脏行都不写入 D */
+  function validRow(row,lot){
+    if(!Array.isArray(row)||row.length<4) return false;
+    var iss=String(row[0]==null?'':row[0]), date=String(row[1]==null?'':row[1]);
+    if(!/^\d{5,8}$/.test(iss)) return false;
+    if(date&&!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+    var r=row[2], b=row[3], i, n, seen;
+    if(!Array.isArray(r)||!Array.isArray(b)) return false;
+    if(lot==='ssq'){
+      if(r.length!==6||b.length!==1) return false;
+      seen={}; for(i=0;i<6;i++){ n=r[i]; if(!isInt(n,1,33)||seen[n]) return false; seen[n]=1; }
+      return isInt(b[0],1,16);
+    }
+    if(lot==='dlt'){
+      if(r.length!==5||b.length!==2) return false;
+      seen={}; for(i=0;i<5;i++){ n=r[i]; if(!isInt(n,1,35)||seen[n]) return false; seen[n]=1; }
+      seen={}; for(i=0;i<2;i++){ n=b[i]; if(!isInt(n,1,12)||seen[n]) return false; seen[n]=1; }
+      return true;
+    }
+    if(r.length!==3||b.length!==0) return false;
+    for(i=0;i<3;i++){ if(!isInt(r[i],0,9)) return false; }
+    return true;
+  }
+  function parseTc(txt,lot){
+    var d; try{ d=JSON.parse(txt); }catch(e){ throw {code:'PARSE',msg:'响应不是 JSON'}; }
+    var list=((d&&d.value)||{}).list||[];
+    if(!Array.isArray(list)) throw {code:'PARSE',msg:'响应结构异常'};
+    var out=[], i, k;
+    for(i=0;i<list.length;i++){
+      var it=list[i]||{}, sp=String(it.lotteryDrawResult||'').split(/\s+/), nums=[];
+      for(k=0;k<sp.length;k++){ if(sp[k]!=='') nums.push(parseInt(sp[k],10)); }
+      var row;
+      if(lot==='dlt'){
+        if(nums.length!==7) continue;
+        row=[String(it.lotteryDrawNum||''),String(it.lotteryDrawTime||'').slice(0,10),
+             nums.slice(0,5).sort(cmpNum),nums.slice(5).sort(cmpNum)];
+      }else{
+        if(nums.length!==3) continue;
+        row=[String(it.lotteryDrawNum||''),String(it.lotteryDrawTime||'').slice(0,10),nums,[]];
+      }
+      if(validRow(row,lot)) out.push(row);
+    }
+    return out;
+  }
+  function parseFc(txt,lot){
+    var d; try{ d=JSON.parse(txt); }catch(e){ throw {code:'PARSE',msg:'响应不是 JSON'}; }
+    var arr=(d&&d.result)||[];
+    if(!Array.isArray(arr)) throw {code:'PARSE',msg:'响应结构异常'};
+    var out=[], i, k;
+    for(i=0;i<arr.length;i++){
+      var it=arr[i]||{}, sp=String(it.red||'').split(','), nums=[];
+      for(k=0;k<sp.length;k++){ if(sp[k]!=='') nums.push(parseInt(sp[k],10)); }
+      var row;
+      if(lot==='ssq'){
+        if(nums.length!==6) continue;
+        row=[String(it.code||''),String(it.date||'').slice(0,10),
+             nums.sort(cmpNum),[parseInt(it.blue,10)]];
+      }else{
+        if(nums.length!==3) continue;
+        row=[String(it.code||''),String(it.date||'').slice(0,10),nums,[]];
+      }
+      if(validRow(row,lot)) out.push(row);
+    }
+    return out;
+  }
+  function byIssue(a,b){
+    var x=String(a[0]), y=String(b[0]);
+    if(x.length!==y.length) return x.length-y.length;
+    return x<y?-1:(x>y?1:0);
+  }
+  /* 只追加新期：绝不改写已有期号，保留 D[lot] 上的其它字段（奖池、走势等） */
+  function append(d,lot,rows){
+    if(!d||!d.rows||!d.rows.length) return [];
+    var seen={}, add=[], i;
+    for(i=0;i<d.rows.length;i++) seen[String(d.rows[i][0])]=1;
+    for(i=0;i<rows.length;i++){
+      var r=rows[i]; if(!validRow(r,lot)) continue;
+      var k=String(r[0]); if(seen[k]) continue;
+      seen[k]=1; add.push(r);
+    }
+    if(add.length) d.rows=d.rows.concat(add).sort(byIssue);
+    return add;
+  }
+  function patchRead(lot){
+    try{
+      var s=localStorage.getItem(PKEY+lot), a=s?JSON.parse(s):[];
+      if(!Array.isArray(a)) return [];
+      return a.filter(function(r){ return validRow(r,lot); });
+    }catch(e){ return []; }
+  }
+  function patchSave(lot,rows){
+    try{
+      if(!rows.length){ localStorage.removeItem(PKEY+lot); return; }
+      var seen={}, out=[], i;
+      for(i=rows.length-1;i>=0;i--){
+        var r=rows[i]; if(!validRow(r,lot)) continue;
+        var k=String(r[0]); if(seen[k]) continue;
+        seen[k]=1; out.unshift(r);
+        if(out.length>=MAXPATCH) break;
+      }
+      localStorage.setItem(PKEY+lot,JSON.stringify(out));
+    }catch(e){}
+  }
+  function patchClear(lot){
+    try{
+      localStorage.removeItem(PKEY+lot);
+      localStorage.removeItem('lcd_'+lot);
+      localStorage.removeItem('lcst_'+lot);
+    }catch(e){}
+  }
+  function merge(lot,rows){
+    var add=append(D[lot],lot,rows);
+    if(add.length) patchSave(lot,patchRead(lot).concat(add));
+    return add.length;
+  }
+  /* 重放本机新增：页面每次重新加载数据后调用，避免被内嵌数据覆盖。幂等。 */
+  function replay(lot){ return append(D[lot],lot,patchRead(lot)).length; }
+  function fetchOne(lot){
+    var d=DEF[lot];
+    if(!d) return Promise.resolve({lot:lot,ok:false,code:'UNKNOWN',msg:'未知彩种'});
+    if(d.proxy&&!proxy()) return Promise.resolve({lot:lot,ok:false,code:'NO_PROXY',msg:'需配置云代理'});
+    return getText(d.url(),d.proxy).then(function(txt){
+      var rows=(lot==='dlt'||lot==='pls')?parseTc(txt,lot):parseFc(txt,lot);
+      return {lot:lot,ok:true,add:merge(lot,rows),msg:''};
+    }).catch(function(e){
+      return {lot:lot,ok:false,code:(e&&e.code)||'NETWORK',msg:(e&&e.msg)||String(e)};
+    });
+  }
+  /* 串行而不是并发：密集请求更容易触发官方风控 */
+  function run(lots){
+    var seq=Promise.resolve(), res=[];
+    lots.forEach(function(lot){
+      seq=seq.then(function(){ return fetchOne(lot).then(function(r){ res.push(r); }); });
+    });
+    return seq.then(function(){ return res; });
+  }
+  function errText(r){
+    if(r.code==='NO_PROXY') return '未配置云代理';
+    if(r.code==='TIMEOUT') return '请求超时';
+    if(r.code==='HTTP') return r.msg||'接口返回错误';
+    if(r.code==='PARSE') return '响应解析失败';
+    return '网络请求失败（可能是跨域或风控拦截）';
+  }
+  return {
+    ORDER:ORDER, DEF:DEF, norm:norm, local:local, hasLocal:hasLocal, setLocal:setLocal,
+    builtin:builtin, proxy:proxy, source:source, loadRemote:loadRemote,
+    sourceHtml:sourceHtml, getText:getText, validRow:validRow,
+    parseTc:parseTc, parseFc:parseFc, append:append, merge:merge, replay:replay,
+    patchRead:patchRead, patchSave:patchSave, patchClear:patchClear,
+    fetchOne:fetchOne, run:run, errText:errText,
+    name:function(l){ return DEF[l]?DEF[l].name:l; },
+    isBusy:function(){ return busy; }, setBusy:function(v){ busy=!!v; },
+    remote:function(){ return remote; }
+  };
+})();
+function pxSrcHtml(){ return OU.sourceHtml(); }
+function pxLoadRemote(cb){ return OU.loadRemote(cb); }
+function ouSetProxy(v){ OU.setLocal(v); }
+function ouProxy(){ return OU.proxy(); }
+function refreshData(){
+  closeSide();
+  var adm=false; try{ adm=admIn(); }catch(e){}
+  var h='<div class="mh">数据更新<span onclick="closeHelp()">×</span></div>';
+  h+='<div class="sec">手动更新</div>';
+  h+='<div class="note" style="padding:8px 12px 0">'
+    +'点一下就补齐最新开奖结果，只影响你自己这台设备。'
+    +'体彩可直接更新；福彩需要已配置云代理。</div>';
+  h+='<div id="ou-pxsrc" class="note" style="padding:6px 12px 0;font-size:12.5px">'+OU.sourceHtml()+'</div>';
+  h+='<div class="btns" style="margin:10px 12px 0">'
+    +'<button class="p" onclick="ouGo(1)">只更新体彩</button>'
+    +'<button onclick="ouGo(2)">全部更新</button></div>';
+  h+='<div id="ou-log" style="padding:8px 12px 0;font-size:12.5px;line-height:1.9"></div>';
+  h+='<div class="sec">重新加载</div>';
+  h+='<div class="note" style="padding:8px 12px 0">重新读取页面数据；或清除本机的手动更新结果。</div>';
+  h+='<div class="btns" style="margin:10px 12px 0">'
+    +'<button class="g" onclick="closeHelp();forceRefresh()">重新加载当前彩种</button>'
+    +'<button class="g" onclick="ouClearPatches()">清除本机新增</button></div>';
+  if(adm){
+    h+='<div class="sec">云代理地址 · 仅管理员可见</div>';
+    h+='<div class="note" style="padding:8px 12px 0">'
+      +'填境内云函数地址；保存后导出站点配置，普通用户即可更新福彩数据。</div>';
+    h+='<div style="padding:10px 12px 0"><input id="ou-px" class="pinp" style="width:100%;box-sizing:border-box"'
+      +' placeholder="https://xxx.tencentscf.com" value="'+escA(OU.proxy())+'"></div>';
+    h+='<div class="btns" style="margin:10px 12px 0">'
+      +'<button class="p" onclick="ouSavePx()">保存到本机</button>'
+      +(OU.hasLocal()?'<button class="g" onclick="ouClearPx()">清除本机</button>':'')
+      +'<button onclick="pxExport()">导出站点配置</button></div>';
+  }
+  h+='<div class="btns" style="margin:16px 12px 12px"><button class="g" style="flex:1" onclick="closeHelp()">关闭</button></div>';
+  modalBox(h);
+  OU.loadRemote(function(){ var e=$('ou-pxsrc'); if(e) e.innerHTML=OU.sourceHtml(); });
+}
+function ouSavePx(){
+  var el=$('ou-px'); OU.setLocal(el?el.value:'');
+  toast('已保存'); refreshData();
+}
+function ouClearPx(){ OU.setLocal(''); toast('本机代理已清除'); refreshData(); }
+function ouClearPatches(){
+  var lots=OU.ORDER, i;
+  for(i=0;i<lots.length;i++) OU.patchClear(lots[i]);
+  /* 单文件版里 EMBEDDED_DATA[lot] 与 D[lot] 是同一个对象，
+     清掉本机缓存后还要让 embeddedLoad 重新从 EMBEDDED_SRC 解析，
+     否则内存里那份仍带着手动更新的行。 */
+  try{ if(typeof EMBEDDED_DATA!=='undefined') EMBEDDED_DATA=null; }catch(e){}
+  toast('已清除本机新增');
+  delete D[S.lot]; showLoading();
+  load(S.lot,true).then(function(){ render(); }).catch(function(e){ showError(e.message||String(e)); });
+}
+function forceRefresh(){
+  delete D[S.lot]; showLoading();
+  load(S.lot,true).then(function(){ render(); }).catch(function(e){ showError(e.message||String(e)); });
+}
+function ouGo(mode){
+  if(OU.isBusy()){ toast('正在更新，请稍候'); return; }
+  var lg=$('ou-log');
+  if(!/^https?:$/.test(location.protocol)){
+    if(lg) lg.innerHTML='<div style="color:#c98a00">当前是本地文件，在线更新需通过网址打开页面。</div>';
+    return;
+  }
+  var el=$('ou-px'); if(el) OU.setLocal(el.value);
+  var lots=(mode===1)?['dlt','pls']:OU.ORDER.slice();
+  if(lg) lg.innerHTML='正在请求…';
+  OU.setBusy(true);
+  OU.run(lots).then(function(res){
+    OU.setBusy(false);
+    var h='', any=0, i;
+    for(i=0;i<res.length;i++){
+      var r=res[i], nm=OU.name(r.lot);
+      if(r.ok){
+        any+=r.add;
+        h+='<div>'+esc(nm)+'：<b style="color:#1a9c46">'+(r.add?('新增 '+r.add+' 期'):'已是最新')+'</b></div>';
+      }else if(r.code==='NO_PROXY'){
+        h+='<div>'+esc(nm)+'：<span style="color:#c98a00">需配置云代理</span></div>';
+      }else{
+        h+='<div>'+esc(nm)+'：<span style="color:#c33">失败</span> <span style="color:#999;font-size:12px">'+esc(OU.errText(r))+'</span></div>';
+      }
+    }
+    if(any){ try{ lcWrite(S.lot,D[S.lot]); }catch(e){} }
+    h+='<div style="margin-top:8px;color:#888;font-size:12px">'
+      +'合计新增 '+any+' 期；结果保存在本机，刷新后仍保留。</div>';
+    if(lg) lg.innerHTML=h;
+    try{ render(); }catch(e){}
+  }).catch(function(e){
+    OU.setBusy(false);
+    if(lg) lg.innerHTML='<div style="color:#c33">更新失败：'+esc(String(e))+'</div>';
+  });
+}
+function pxExport(){
+  var px=OU.proxy();
+  if(!px){ toast('请先填写代理地址'); return; }
+  var txt=JSON.stringify({proxy:px,updated:new Date().toISOString().slice(0,10)},null,2);
+  var h='<div class="mh">导出站点配置<span onclick="closeHelp()">×</span></div>';
+  h+='<div class="note" style="padding:10px 12px 0;font-size:12.5px">'
+    +'把下面内容存成 <b>proxy.json</b>，放到网址版站点根目录（与 index.html 同级），'
+    +'提交后<b style="color:#1a9c46">所有普通用户打开页面即可生效</b>。<br>'
+    +'<span style="color:#888">单文件版读不到这个文件，需用构建脚本带 --proxy 重新生成。</span></div>';
+  h+='<div style="padding:10px 12px 0"><textarea id="px-txt" class="pinp" rows="5" style="width:100%;box-sizing:border-box;font-size:12px">'+esc(txt)+'</textarea></div>';
+  h+='<div class="btns" style="margin:10px 12px 0">'
+    +'<button class="p" onclick="pxCopy()">复制</button>'
+    +'<button onclick="pxDownload()">下载 proxy.json</button></div>';
+  h+='<div class="btns" style="margin:16px 12px 12px"><button class="g" style="flex:1" onclick="refreshData()">返回</button></div>';
+  modalBox(h);
+}
+function pxCopy(){
+  var el=$('px-txt'); if(!el) return;
+  try{ el.select(); document.execCommand('copy'); toast('已复制'); }catch(e){ toast('请手动复制'); }
+}
+function pxDownload(){
+  var el=$('px-txt'); if(!el) return;
+  try{
+    var b=new Blob([el.value],{type:'application/json'});
+    var a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='proxy.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(a.href); },1000);
+  }catch(e){ toast('下载失败，请手动复制'); }
+}
 function clearMyBets(){
   closeSide(); saveBets([]); if(S.tab==='mine') render();
 }
@@ -4413,6 +4786,9 @@ var HELP_SECTIONS=[
    +'<ul><li><b>开奖历史</b>含<b>表格 / 走势图</b>两个视图；<b>号码统计</b>含<b>出现次数 / 冷热分布 / 遗漏排行</b>三个视图</li>'
    +'<li><b>我的选号</b>上半是选号区，下半是已保存记录</li>'
    +'<li>切到<b>福彩3D / 排列三</b>时，<b>蓝球分析</b>与<b>奖池走势</b>自动隐藏，剩 <b>8 个</b></li></ul>'
+  },
+ {t:'手动更新', b:
+   '<p>菜单<b>「数据更新」</b>可手动补齐最新开奖结果；新增内容只保存在本机，不影响别人。</p>'
   },
  {t:'四种玩法', b:
    '<ul><li><b>双色球</b>：6 红（1-33）＋1 蓝（1-16）</li>'
@@ -7594,6 +7970,7 @@ function warmAnalyze(){
   })();
 }
 function boot(){
+  if(typeof OU!=='undefined') OU.loadRemote();
   if(licBlocked()){ var mb=$('main'); if(mb) mb.innerHTML=renderLock(); renderLockChrome(); licInitMenu(); return; }
   ensure(S.lot).then(function(){
     render();
