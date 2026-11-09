@@ -14,23 +14,29 @@
 <style>
 /* ---------- 主题变量 ---------- */
 :root{
-  --bg:#f2f3f5; --surface:#fff; --surface2:#fafafa; --surface3:#f5f5f5;
-  --fg:#1a1a1a; --fg2:#333; --fg3:#555; --fg4:#666; --fg5:#888; --fg6:#999; --fg7:#aaa;
-  --bd:#e5e5e5; --bd2:#ddd; --bd3:#f0f0f0; --hover:#f7f7f7;
-  --hl:#fff3d6; --brand:#e8402a;
+  --bg:#f3f5f9; --surface:#ffffff; --surface2:#f7f9fc; --surface3:#eef2f7;
+  --fg:#17212f; --fg2:#2c3949; --fg3:#3e4b5d; --fg4:#5a6879; --fg5:#7d8999; --fg6:#97a2b1; --fg7:#aab4c1;
+  --bd:#e2e8f0; --bd2:#d3dce7; --bd3:#edf1f6; --hover:#f4f7fb;
+  --hl:#fff4d6; --brand:#cf332b; --brand-deep:#a8241e; --brand-soft:rgba(207,51,43,.075);
+  --accent:#1d5fd6;
   --warnbg:#fff8e6; --hitbg:#fff5e6; --warnfg:#8a6100;
   --okbg:#e8f5e9; --okfg:#2e7d32; --errbg:#ffebee; --errfg:#c62828;
   --hitbd:#ffd9a6; --hlbd:#f0e2bd;
+  --shadow-card:0 1px 2px rgba(16,24,40,.04),0 8px 20px rgba(16,24,40,.045);
+  --shadow-pop:0 12px 34px rgba(16,24,40,.16);
   color-scheme:light;
 }
 body.dark{
-  --bg:#121212; --surface:#1e1e1e; --surface2:#252525; --surface3:#2b2b2b;
-  --fg:#e6e6e6; --fg2:#d8d8d8; --fg3:#c0c0c0; --fg4:#a8a8a8; --fg5:#949494; --fg6:#848484; --fg7:#787878;
-  --bd:#333; --bd2:#3d3d3d; --bd3:#2c2c2c; --hover:#2e2e2e;
-  --hl:#4a3a14; --brand:#ff5a45;
+  --bg:#0f141c; --surface:#171f2a; --surface2:#1d2734; --surface3:#253141;
+  --fg:#e7edf5; --fg2:#d7e0ea; --fg3:#c1ccd9; --fg4:#a8b5c4; --fg5:#94a1b1; --fg6:#8492a3; --fg7:#758394;
+  --bd:#2c3847; --bd2:#3a4757; --bd3:#24303e; --hover:#222d3b;
+  --hl:#4a3a14; --brand:#ff6656; --brand-deep:#e04a3b; --brand-soft:rgba(255,102,86,.13);
+  --accent:#7aa7ff;
   --warnbg:#3a2f16; --hitbg:#38301a; --warnfg:#ffcc80;
   --okbg:#1e3320; --okfg:#6fbf73; --errbg:#3a1e20; --errfg:#ff7b72;
   --hitbd:#6b5330; --hlbd:#5a4a26;
+  --shadow-card:0 1px 2px rgba(0,0,0,.28),0 8px 20px rgba(0,0,0,.26);
+  --shadow-pop:0 12px 34px rgba(0,0,0,.5);
   color-scheme:dark;      /* 让下拉框、滚动条等原生控件一起变深 */
 }
 /* 内联样式里写死的颜色，用属性选择器统一接管（选择器内容不可被变量替换） */
@@ -374,6 +380,100 @@ body.dark .toastbox{background:rgba(240,240,240,.94);color:#1a1a1a}
 @media (min-width:1400px){
   .lot,.tabs,main{max-width:1320px}
 }
+
+/* ============ 专业视觉层：层级 / 留白 / 质感 ============ */
+html{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body{letter-spacing:.12px;line-height:1.55;font-variant-numeric:tabular-nums}
+header{background:linear-gradient(180deg,var(--surface) 0%,var(--surface2) 100%);
+ border-bottom:1px solid var(--bd)}
+.lot{gap:10px}
+.lot button{border-radius:10px;border:1px solid var(--bd2);font-size:14.5px;letter-spacing:.2px;
+ color:var(--fg3);background:var(--surface);
+ transition:background .16s,color .16s,border-color .16s,box-shadow .16s}
+.lot button:hover{border-color:var(--brand);color:var(--brand)}
+.lot button.on{background:linear-gradient(135deg,var(--brand),var(--brand-deep));
+ border-color:transparent;color:#fff;box-shadow:0 4px 12px rgba(207,51,43,.22)}
+.menu{border-radius:10px;transition:background .16s,border-color .16s}
+.menu:hover{border-color:var(--brand);background:var(--hover)}
+.tabs{gap:2px;padding:2px 0 0}
+.tabs button{border-radius:8px 8px 0 0;font-size:12.5px;letter-spacing:.3px;
+ padding:9px 8px;transition:color .16s,background .16s}
+.tabs button:hover{background:var(--hover);color:var(--fg2)}
+.tabs button.on{background:var(--brand-soft);color:var(--brand);border-bottom-color:var(--brand)}
+.card{border:1px solid var(--bd3);border-radius:14px;box-shadow:var(--shadow-card);
+ margin-bottom:14px;transition:box-shadow .18s,transform .18s}
+@media (min-width:900px){.card:hover{box-shadow:var(--shadow-pop)}}
+.bar{padding:11px 14px;gap:9px;border-bottom:1px solid var(--bd3)}
+.bar label{font-weight:600;letter-spacing:.2px}
+.sec{padding:9px 14px;font-size:12.5px;font-weight:700;letter-spacing:.5px;color:var(--fg3);
+ background:var(--surface2);border-bottom:1px solid var(--bd3);border-left:3px solid var(--brand)}
+.hint{padding:9px 14px;font-size:12px;color:var(--fg5);letter-spacing:.2px}
+.note{font-size:11.5px;line-height:1.75;color:var(--fg6);padding:10px 14px;
+ border-top:1px dashed var(--bd3)}
+table{font-size:13px;font-variant-numeric:tabular-nums}
+th{background:linear-gradient(180deg,var(--surface2),var(--surface3));color:var(--fg4);
+ font-size:12px;letter-spacing:.4px;font-weight:700;border-bottom:1px solid var(--bd2);padding:9px 10px}
+th.act{color:var(--brand)}
+td{padding:8px 10px;color:var(--fg2)}
+tbody tr:nth-child(even){background:rgba(16,24,40,.018)}
+body.dark tbody tr:nth-child(even){background:rgba(255,255,255,.022)}
+tbody tr:hover{background:var(--brand-soft)}
+tbody tr.hl,tbody tr.hl:nth-child(even){background:var(--hl)}
+tbody tr.hl td{border-bottom-color:var(--hlbd)}
+.b.r{background:linear-gradient(145deg,#e4554b,var(--brand-deep))}
+.b.bl{background:linear-gradient(145deg,#4a86e8,#20519f)}
+.b.hit{box-shadow:0 0 0 2px #f9a825,0 0 0 4px rgba(249,168,37,.22)}
+.nb{border-radius:9px;transition:transform .12s,box-shadow .16s,background .16s}
+.nb:hover{transform:translateY(-1px);box-shadow:0 3px 8px rgba(16,24,40,.12)}
+.nb.sel{background:linear-gradient(145deg,#e4554b,var(--brand-deep));border-color:transparent;
+ box-shadow:0 3px 9px rgba(207,51,43,.25)}
+.nb.sel.b{background:linear-gradient(145deg,#4a86e8,#20519f)}
+.seg{border-radius:9px;border-color:var(--bd2);box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.seg button{font-weight:600;letter-spacing:.2px;transition:background .16s,color .16s}
+.seg button:hover:not(.on){background:var(--hover)}
+.seg button.on{background:linear-gradient(135deg,var(--brand),var(--brand-deep));border-color:transparent}
+select,.ipt,.dti,.selmini{border-radius:8px;border-color:var(--bd2);outline:none;
+ transition:border-color .16s,box-shadow .16s}
+select:focus,.ipt:focus,.dti:focus,.selmini:focus{border-color:var(--brand);
+ box-shadow:0 0 0 3px var(--brand-soft)}
+.btns button{border-radius:9px;font-weight:600;letter-spacing:.2px;
+ transition:transform .12s,box-shadow .16s,background .16s}
+.btns button:hover{transform:translateY(-1px);box-shadow:0 4px 10px rgba(16,24,40,.1)}
+.btns button.p{background:linear-gradient(135deg,var(--brand),var(--brand-deep));
+ border-color:transparent;box-shadow:0 3px 9px rgba(207,51,43,.2)}
+.mini{border-radius:7px;font-weight:600}
+.rdo span{border-radius:8px;transition:background .16s,color .16s,border-color .16s}
+.rdo span:hover{border-color:var(--brand);color:var(--brand)}
+.rdo span.on{background:linear-gradient(135deg,var(--brand),var(--brand-deep));border-color:transparent}
+.statcard,.zgrp,.recf,.cartbox,.prev,.cdown,.bres,.amtbig,.slipsum,.pz{border-radius:12px}
+.sci{border-radius:10px}
+.modal{border:1px solid var(--bd3);box-shadow:var(--shadow-pop);border-radius:16px}
+.mh{font-weight:700;letter-spacing:.3px}
+.sidemask{background:rgba(12,18,28,.5);backdrop-filter:blur(2px)}
+.sidepanel{box-shadow:var(--shadow-pop)}
+.sidehead{letter-spacing:.4px}
+.sideitem{letter-spacing:.2px}
+.chip{border-radius:7px}
+.lg{border-radius:5px}
+.hcell{border-radius:8px;box-shadow:0 1px 3px rgba(16,24,40,.10)}
+.zball{border-radius:12px;box-shadow:0 2px 6px rgba(16,24,40,.06)}
+.znum,.sci em,.pzname,.amtbig b,.slip .slipballs{font-variant-numeric:tabular-nums}
+.pzname{letter-spacing:.5px}
+.warn,.amtwarn,.simwarn,.toastbox{border-radius:9px}
+.tabdot{box-shadow:0 1px 3px rgba(16,24,40,.18)}
+.dlbtn{border-radius:9px;background:linear-gradient(135deg,var(--brand),var(--brand-deep))}
+.more{letter-spacing:.3px}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:6px;border:2px solid var(--bg)}
+::-webkit-scrollbar-thumb:hover{background:var(--fg6)}
+/* PC 宽屏：恢复原适配，避免被上面的基础规则盖掉 */
+@media (min-width:900px){
+  main{padding:14px 18px 34px}
+  table{font-size:14px}
+  th,td{padding:10px 14px}
+}
+
 </style>
 </head>
 <body>
@@ -1164,7 +1264,7 @@ var S = {noApi:STATIC_BUILD, lot:'ssq', tab:'hist',
   listSort:{k:0,dir:-1}, listLimit:60,
   /* 走势视图一次最多渲染多少期：再点下去 DOM 节点会撑爆手机 */
   trendNum:1, trendScope:'month', distLimit:20,
-  fSort:{red:{k:1,dir:1}, blue:{k:1,dir:1}},
+  fSort:{all:{k:1,dir:1}},
   /* 蓝球分析：综合评分的排序条件，默认出现次数升序（次数少的号在前） */
   blueSorts:[{k:'cnt',dir:1}],
   heatSort:'num',
@@ -1721,33 +1821,63 @@ function statLine(num,max,rowsWin,lab){
 }
 function setNum(n){ S.trendNum=n; render(); }
 
+/* ---------- 号码统计统一口径 ----------
+   不区分主区 / 副区：每期开出的所有球都按「号码」计数。
+   双色球 1-33（副区 1-16 落在这个范围内）、大乐透 1-35。
+   按位玩法不走这组函数，仍由 renderFreq3 / renderHeat3 / missRankData3 处理。 */
+function statNumsOf(row){
+  var a = ((row && row[2]) || []).slice();
+  if(!isPos() && row && row[3]) a = a.concat(row[3]);
+  return a;
+}
+function statNumsUniq(row){
+  var a=statNumsOf(row), u=[], i;
+  for(i=0;i<a.length;i++) if(u.indexOf(a[i])<0) u.push(a[i]);
+  return u;
+}
+function statNumMax(){ var d=D[S.lot]||{}; return Math.max(d.redMax||0,d.blueMax||0); }
+function statBallTotal(){
+  var d=D[S.lot]||{};
+  return (d.redCount||0)+(isPos()?0:(d.blueCount||0));
+}
+/* 某号码每期理论出现次数 = 主区概率 + 副区概率。
+   1-16 同时可能被两个区开出，概率更高；冷热判定必须按各自期望算，
+   否则这一段号码会被一律误标成「极热」。 */
+function statNumProb(n){
+  var d=D[S.lot]||{}, p=0;
+  if(n>=1 && n<=d.redMax) p += d.redCount/d.redMax;
+  if(!isPos() && n>=1 && n<=d.blueMax) p += d.blueCount/d.blueMax;
+  return p;
+}
+function statRangeLabel(){ return '全部号码（1-'+statNumMax()+'）'; }
+
 /* ---------- 出现次数 ---------- */
-function freqData(isBlue,win){
-  var d=D[S.lot], max=isBlue?d.blueMax:d.redMax, key=isBlue?3:2, cnt=[];
+function freqData(win){
+  var max=statNumMax(), cnt=[], i, j, n;
   var sc=scopeRows(win||statWinGet()), rows=sc.rows;
-  for(var n=0;n<=max;n++) cnt[n]=0;
-  for(var i=0;i<rows.length;i++){
-    var arr=rows[i][key];
-    for(var j=0;j<arr.length;j++) if(arr[j]>=0&&arr[j]<=max) cnt[arr[j]]++;
+  for(n=0;n<=max;n++) cnt[n]=0;
+  for(i=0;i<rows.length;i++){
+    var arr=statNumsOf(rows[i]);
+    for(j=0;j<arr.length;j++) if(arr[j]>=1&&arr[j]<=max) cnt[arr[j]]++;
   }
-  var draws=rows.length, per=isBlue?d.blueCount:d.redCount, out=[];
-  for(var n2=1;n2<=max;n2++) out.push({num:n2,cnt:cnt[n2],pct:draws?cnt[n2]/(draws*per)*100:0});
+  var draws=rows.length, per=statBallTotal(), out=[];
+  for(n=1;n<=max;n++) out.push({num:n,cnt:cnt[n],pct:(draws&&per)?cnt[n]/(draws*per)*100:0});
   return out;
 }
-/* 出现次数（非按位）—— 只出红球，蓝球统一收敛到「蓝球分析」页签 */
 function renderFreq(){
-  var d=D[S.lot];
-  var win=statWinGet(), sc=scopeRows(win), rows=sc.rows;
+  var d=D[S.lot], win=statWinGet(), sc=scopeRows(win), rows=sc.rows;
   if(!rows.length) return '<div class="empty">所选窗口内没有数据</div>';
   var h='<div class="hint">默认按出现次数升序 ▲，点击表头切换排序字段与升降序；切换窗口后数据随之变化</div>'
-   + freqBlock(false, d.redLabel+'（'+d.redMax+'个）','red')
+   + freqBlock(statRangeLabel(),'all')
    +'<div class="note">统计区间：'+rows[0][0]+' ~ '+rows[rows.length-1][0]
-   +'，共 '+rows.length+' 期（'+sc.label+'）。占比 = 出现次数 ÷ 该区总球位数。<br>'
+   +'，共 '+rows.length+' 期（'+sc.label+'）。<br>'
+   +'每期开出的全部号码合并计数，不区分'+esc(d.redLabel)+' / '+esc(d.blueLabel)
+   +'；同一数字在一期内出现两次计两次。占比 = 出现次数 ÷ 该区间总球位数。<br>'
    +'窗口越短样本越少，次数差异越大——这是随机波动，不代表冷热趋势。</div>';
   return h;
 }
-function freqBlock(isBlue,title,tag){
-  var rows=freqData(isBlue), so=S.fSort[tag];
+function freqBlock(title,tag){
+  var rows=freqData(), so=S.fSort[tag]||(S.fSort[tag]={k:1,dir:1});
   var cols=[['num','号码'],['cnt','出现次数'],['pct','占比%']];
   rows.sort(function(a,b){
     var x=a[cols[so.k][0]],y=b[cols[so.k][0]];
@@ -1763,53 +1893,55 @@ function freqBlock(isBlue,title,tag){
   return h+'</tbody></table></div>';
 }
 function sortFreq(tag,k){
-  var so=S.fSort[tag];
+  var so=S.fSort[tag]||(S.fSort[tag]={k:1,dir:1});
   if(so.k===k) so.dir*=-1; else {so.k=k;so.dir=1}
   render();
 }
 
 /* ---------- 冷热分布（方格） ---------- */
-function heatData(isBlue){
-  var d=D[S.lot], max=isBlue?d.blueMax:d.redMax, key=isBlue?3:2;
-  var sc=scopeRows(statWinGet());
-  var rows=sc.rows, N=sc.rows.length, cnt=[];
-  for(var n=0;n<=max;n++) cnt[n]=0;
-  for(var i=0;i<rows.length;i++){
-    var arr=rows[i][key];
-    for(var j=0;j<arr.length;j++) if(arr[j]>=0&&arr[j]<=max) cnt[arr[j]]++;
+function heatData(){
+  var max=statNumMax(), sc=scopeRows(statWinGet());
+  var rows=sc.rows, N=rows.length, cnt=[], i, j, n;
+  for(n=0;n<=max;n++) cnt[n]=0;
+  for(i=0;i<rows.length;i++){
+    var arr=statNumsOf(rows[i]);
+    for(j=0;j<arr.length;j++) if(arr[j]>=1&&arr[j]<=max) cnt[arr[j]]++;
   }
-  var per=isBlue?d.blueCount:d.redCount, p=per/max, exp=N*p, sd=Math.sqrt(N*p*(1-p))||1, out=[];
-  for(var n2=1;n2<=max;n2++) out.push({num:n2,cnt:cnt[n2],exp:exp,z:(cnt[n2]-exp)/sd,dev:cnt[n2]-exp});
+  var out=[];
+  for(n=1;n<=max;n++){
+    var p=statNumProb(n), exp=N*p, sd=Math.sqrt(N*p*(1-p))||1;
+    out.push({num:n,cnt:cnt[n],exp:exp,z:(cnt[n]-exp)/sd,dev:cnt[n]-exp});
+  }
   return out;
 }
 function heatColor(z){
   if(z<=-1.5) return '#3b6fd4';
   if(z<=-0.5) return '#8ab0e8';
-  if(z<0.5)   return '#b0b0b0';
+  if(z<0.5)   return '#9aa7b6';
   if(z<1.5)   return '#ee9182';
   return '#d63a2a';
 }
 function renderHeat(){
-  var d=D[S.lot];
   var sc=scopeRows(statWinGet());
   if(!sc.rows.length) return '<div class="empty">所选窗口内没有数据</div>';
   var h='<div class="bar">'
    +'<div class="seg"><button class="'+(S.heatSort==='num'?'on':'')+'" onclick="S.heatSort=\'num\';render()">按号码</button>'
    +'<button class="'+(S.heatSort==='heat'?'on':'')+'" onclick="S.heatSort=\'heat\';render()">按冷热</button></div>'
    +'</div>';
-  h+=heatBlock(false,d.redLabel+'（'+d.redMax+'个）','red');
+  h+=heatBlock(statRangeLabel());
   h+='<div class="lgd"><span class="lgb" style="background:#3b6fd4"></span>极冷'
     +'<span class="lgb" style="background:#8ab0e8;margin-left:6px"></span>偏冷'
-    +'<span class="lgb" style="background:#b0b0b0;margin-left:6px"></span>正常'
+    +'<span class="lgb" style="background:#9aa7b6;margin-left:6px"></span>正常'
     +'<span class="lgb" style="background:#ee9182;margin-left:6px"></span>偏热'
     +'<span class="lgb" style="background:#d63a2a;margin-left:6px"></span>极热</div>';
-  h+='<div class="note">格内为「号码 / 该窗口出现次数」。冷热按偏离理论次数的标准差判定，'
+  h+='<div class="note">格内为「号码 / 该窗口出现次数」。不区分'+esc(D[S.lot].redLabel)
+    +' / '+esc(D[S.lot].blueLabel)+'，全部号码合并统计。<br>'
+    +'冷热按<b>每个号码自身的理论出现次数</b>（两个区概率之和）与标准差判定，'
     +'仅反映已开奖结果，无预测能力。窗口越小样本越少，冷热波动越大。</div>';
   return h;
 }
-function heatBlock(isBlue,title,tag){
-  var rows=heatData(isBlue), max=isBlue?D[S.lot].blueMax:D[S.lot].redMax;
-  var arr=rows.slice();
+function heatBlock(title){
+  var rows=heatData(), arr=rows.slice();
   if(S.heatSort==='heat') arr.sort(function(a,b){return a.z-b.z});
   else arr.sort(function(a,b){return a.num-b.num});
   var h='<div class="sec">'+title+'</div><div class="heatgrid">';
@@ -1819,12 +1951,11 @@ function heatBlock(isBlue,title,tag){
       +'<div class="hn">'+pad(r.num)+'</div><div class="hc">'+r.cnt+'次</div></div>';
   }
   h+='</div>';
-  /* 极热 / 极冷 */
   var hot=rows.slice().sort(function(a,b){return b.z-a.z}).slice(0,3);
   var cold=rows.slice().sort(function(a,b){return a.z-b.z}).slice(0,3);
-  h+='<div class="toprow"><span style="color:#888">最热</span>';
+  h+='<div class="toprow"><span style="color:var(--fg6)">最热</span>';
   hot.forEach(function(r){ h+='<span class="chip" style="background:'+heatColor(r.z)+'">'+pad(r.num)+' '+r.cnt+'次</span>'; });
-  h+='</div><div class="toprow"><span style="color:#888">最冷</span>';
+  h+='</div><div class="toprow"><span style="color:var(--fg6)">最冷</span>';
   cold.forEach(function(r){ h+='<span class="chip" style="background:'+heatColor(r.z)+'">'+pad(r.num)+' '+r.cnt+'次</span>'; });
   h+='</div>';
   return h;
@@ -4779,7 +4910,7 @@ var HELP_SECTIONS=[
   {t:'页签一览', b:
    '<p>顶部共 <b>10 个页签</b>（最左「菜单」除外）：<b>开奖历史</b>、<b>号码统计</b>、<b>区间分布</b>、<b>蓝球分析</b>、'
    +'<b>奖池走势</b>、<b>我的选号</b>、<b>我的收藏</b>、<b>中奖核对</b>、<b>复式/胆拖</b>、<b>猜号参考</b>。</p>'
-   +'<ul><li><b>开奖历史</b>含<b>表格 / 走势图</b>两个视图；<b>号码统计</b>含<b>出现次数 / 冷热分布 / 遗漏排行</b>三个视图</li>'
+   +'<ul><li><b>开奖历史</b>含<b>表格 / 走势图</b>两个视图；<b>号码统计</b>含<b>出现次数 / 冷热分布 / 遗漏排行 / 重号连号同尾</b>四个视图</li>'
    +'<li><b>我的选号</b>上半是选号区，下半是已保存记录</li>'
    +'<li>切到<b>福彩3D / 排列三</b>时，<b>蓝球分析</b>与<b>奖池走势</b>自动隐藏，剩 <b>8 个</b></li></ul>'
   },
@@ -4800,8 +4931,9 @@ var HELP_SECTIONS=[
    +'<li>按位玩法改为<b>百 / 十 / 个位折线</b>，和值取三位之和；表格多出<b>形态</b>与<b>跨度</b>两列</li></ul>'
   },
  {t:'号码统计', b:
-   '<ul><li>三个视图：<b>出现次数</b>（表格）、<b>冷热分布</b>（色块）、<b>遗漏排行</b>（按当前遗漏降序），窗口下拉三者共用</li>'
-   +'<li>只统计<b>红球（前区）</b>；蓝球 / 后区请看<b>蓝球分析</b>页</li>'
+   '<ul><li>四个视图：<b>出现次数</b>（表格）、<b>冷热分布</b>（色块）、<b>遗漏排行</b>（按当前遗漏降序）、<b>重号 / 连号 / 同尾</b>，窗口下拉共用</li>'
+   +'<li><b>不区分红球 / 蓝球</b>：每期开出的全部号码合并统计，只看号码本身</li>'
+   +'<li>冷热按每个号码自身的理论出现次数判定；1-16 同时属于两个区，已单独修正</li>'
    +'<li>窗口可选近一个月 / 近一年 / 全部历史；点表头切换排序</li>'
    +'<li>遗漏 ≥30 期标红；<b>遗漏再大也不会「补偿性」开出</b></li>'
    +'<li>按位玩法按<b>百 / 十 / 个位</b>分别统计</li></ul>'
@@ -5516,13 +5648,12 @@ function fsShrunk(){
 /* ================= 遗漏排行榜 =================
    当前遗漏 = 该号码距上一次开出，已经连续多少期没出现。
    遗漏越大＝越久没出（越"冷"）。同样是已开奖结果的统计，没有预测能力。 */
-function missRankData(isBlue){
-  var d=D[S.lot], max=isBlue?d.blueMax:d.redMax, key=isBlue?3:2, n, i;
-  var rows=d.rows||[], out=[];
+function missRankData(){
+  var max=statNumMax(), rows=D[S.lot].rows||[], out=[], n, i;
   for(n=1;n<=max;n++){
     var m=-1, ld='';
     for(i=rows.length-1;i>=0;i--){
-      if((rows[i][key]||[]).indexOf(n)>=0){ m=rows.length-1-i; ld=rows[i][1]||''; break; }
+      if(statNumsOf(rows[i]).indexOf(n)>=0){ m=rows.length-1-i; ld=rows[i][1]||''; break; }
     }
     out.push({num:n, miss:(m<0?rows.length:m), never:(m<0), last:ld});
   }
@@ -5542,16 +5673,16 @@ function missRankData3(p){
   out.sort(function(a,b){ return b.miss-a.miss || a.num-b.num; });
   return out;
 }
-function missTable(arr,title,isBlue){
+function missTable(arr,title){
   var top=(S.missTop==='all')?arr.length:parseInt(S.missTop,10)||10;
   var show=arr.slice(0,top), i;
   var h='<div class="sec">'+title+'</div><div class="scroll"><table>'
     +'<thead><tr><th>号码</th><th>当前遗漏</th><th>最近一次开出</th></tr></thead><tbody>';
   for(i=0;i<show.length;i++){
     var x=show[i];
-    h+='<tr><td>'+(isBlue?'<span class="b bl">'+pad(x.num)+'</span>':'<b>'+pad(x.num)+'</b>')+'</td>'
-      +'<td><b style="color:'+(x.miss>=30?'#c62828':'#555')+'">'+x.miss+' 期</b></td>'
-      +'<td style="font-size:12.5px;color:#888">'+(x.never?'从未开出':esc(x.last))+'</td></tr>';
+    h+='<tr><td><b>'+pad(x.num)+'</b></td>'
+      +'<td><b style="color:'+(x.miss>=30?'var(--errfg)':'var(--fg3)')+'">'+x.miss+' 期</b></td>'
+      +'<td style="font-size:12.5px;color:var(--fg6)">'+(x.never?'从未开出':esc(x.last))+'</td></tr>';
   }
   h+='</tbody></table></div>';
   return h;
@@ -5563,17 +5694,18 @@ function renderMiss(){
    +[['10','前 10 个'],['20','前 20 个'],['all','全部']].map(function(o){
       return '<option value="'+o[0]+'"'+(String(S.missTop)===o[0]?' selected':'')+'>'+o[1]+'</option>'}).join('')
    +'</select>'
-   +'<label style="color:#aaa;font-size:12px">按当前遗漏降序</label></div>'
+   +'<label style="color:var(--fg6);font-size:12px">按当前遗漏降序</label></div>'
    +'<div class="hint">当前遗漏＝距上一次开出已连续多少期没出，遗漏越大越久没出</div>';
   if(P){
-    /* 按位玩法：三个位各一张表，概览只统计位数字（没有蓝球） */
     for(var p=0;p<3;p++)
-      h+=missTable(missRankData3(p), (d.posLabels?d.posLabels[p]:('第'+(p+1)+'位'))+'（0-9）', false);
+      h+=missTable(missRankData3(p), (d.posLabels?d.posLabels[p]:('第'+(p+1)+'位'))+'（0-9）');
   }else{
-    h+=missTable(missRankData(false), d.redLabel+'（1-'+d.redMax+'）', false);
+    h+=missTable(missRankData(), statRangeLabel());
   }
   h+='<div class="note">⚠️ 遗漏只是<b>已开奖结果的统计</b>。每个号码每期出现概率恒定，'
-    +'遗漏再大也不会"补偿性"开出——追冷号是最容易花大钱的做法，请量力而行。</div>';
+    +'遗漏再大也不会"补偿性"开出——追冷号是最容易花大钱的做法，请量力而行。<br>'
+    +(P?'按位玩法按百 / 十 / 个位分别统计。':'不区分'+esc(d.redLabel)+' / '+esc(d.blueLabel)
+       +'，每期开出的全部号码合并统计。')+'</div>';
   return h;
 }
 /* ================= 历史比对（最相近的开奖） =================
@@ -6475,13 +6607,6 @@ function statBar(){
    +'</div></div>';
   return h;
 }
-function statJumpBlue(){
-  if(isPos()) return '';
-  var d=D[S.lot];
-  return '<div style="padding:2px 12px 12px">'
-    +'<button class="p" style="width:100%" onclick="setTab(\'blue\')">'
-    +'查看'+esc(d.blueLabel)+'完整分析 →</button></div>';
-}
 /* ───────── 新功能④ 重号 / 连号 / 同尾 统计 ─────────
    号码统计的第 4 个视图。这些都是真实存在的规律统计（不是预测）：
      重号 = 当期号码里，上一期也出现过的号码个数
@@ -6491,7 +6616,7 @@ function shapeStats(rows){
   var i, rep=[], link=0, tail=0, n=rows.length;
   var dist={};          /* 重号个数 → 期数 */
   for(i=1;i<n;i++){
-    var cur=rows[i][2]||[], prev=rows[i-1][2]||[];
+    var cur=statNumsUniq(rows[i]), prev=statNumsUniq(rows[i-1]);
     var c=0, k, j2;
     for(k=0;k<cur.length;k++) if(prev.indexOf(cur[k])>=0) c++;
     rep.push(c); dist[c]=(dist[c]||0)+1;
@@ -6597,7 +6722,7 @@ function renderStat(){
   else if(v==='heat') h+=renderHeat();
   else if(v==='shape')h+=renderShape();
   else                h+=renderMiss();
-  h+=statJumpBlue()+'</div>';
+  h+='</div>';
   return h;
 }
 function renderStat3(){
