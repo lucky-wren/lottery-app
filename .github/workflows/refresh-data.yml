@@ -1,0 +1,178 @@
+name: 定时刷新彩票数据
+
+# 每天按开奖日抓一次 + 次日兜底一次，抓完重新生成单文件版并推送，
+# 再用 workflow_dispatch 显式触发 deploy-pages.yml 发布到 Pages。
+# 注意：GITHUB_TOKEN 推送的提交不会触发新的 workflow 运行，
+# 不能依赖 dist/单文件版/** 的 push 事件来部署。
+#
+# 官方接口统一经境内云函数转发，避免 GitHub runner 的境外出口 IP
+# 被彩票站按段风控（403 / 567）。云函数地址放在仓库 Secret LOTTERY_PROXY。
+#
+# cron 用 UTC（北京 = UTC+8）：北京 21:43 → UTC 13:43，次日 09:13 → UTC 01:13。
+# 分钟数避开整点，减少 GitHub 高负载期的排队延迟。
+
+on:
+  schedule:
+    - cron: '43 13 * * *'
+    - cron: '13 1 * * *'
+
+  workflow_dispatch:
+    inputs:
+      poll_minutes:
+        description: '轮询等待分钟数（0=不等待）'
+        type: string
+        default: '12'
+
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'dist/**'
+      - '**.md'
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: lottery-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      LOTTERY_PROXY: ${{ secrets.LOTTERY_PROXY }}
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 配置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install requests
+
+      - name: 检查云代理配置与连通性
+        run: |
+          if [ -z "$LOTTERY_PROXY" ]; then
+            echo "::error::未配置仓库 Secret LOTTERY_PROXY（境内云函数地址）"
+            echo "Settings → Secrets and variables → Actions → New repository secret"
+            exit 1
+          fi
+          python3 - <<'PY'
+          import os, urllib.request
+          p = os.environ['LOTTERY_PROXY'].strip()
+          sep = '&' if '?' in p else '?'
+          u = p + sep + 'lot=ssq&n=1'
+          try:
+              r = urllib.request.urlopen(u, timeout=40)
+              body = r.read(160).decode('utf-8', 'ignore')
+              print('云函数自检 HTTP', r.status, '响应片段:', body)
+          except Exception as e:
+              print('::error::云函数不可达:', e)
+              raise SystemExit(1)
+          PY
+
+      - name: 打印触发来源与时间
+        run: |
+          echo "触发 schedule: ${{ github.event.schedule || '(手动/推送)' }}"
+          echo "UTC  现在: $(date -u '+%F %H:%M')"
+          echo "北京 现在: $(TZ='Asia/Shanghai' date '+%F %H:%M')"
+
+      - name: 抓取并生成产物（开奖日轮询等数据）
+        id: gen
+        run: |
+          POLL="${{ github.event.inputs.poll_minutes }}"
+          [ -z "$POLL" ] && POLL=12
+          # 抓取失败必须让 job 变红，避免「全绿但数据从不更新」。
+          set -o pipefail
+          python3 cron_refresh.py --poll-minutes "$POLL" 2>&1 | tee cron.log
+          rc=${PIPESTATUS[0]}
+          echo "退出码: $rc"
+          echo "rc=$rc" >> $GITHUB_OUTPUT
+          echo "changed=$(grep -c 'CHANGED=yes' cron.log || true)" >> $GITHUB_OUTPUT
+          echo "failed=$(grep -o 'FAILED=.*' cron.log | tail -1 | cut -d= -f2-)" >> $GITHUB_OUTPUT
+          # 部分彩种失败时仍要提交已成功的数据，失败判定放到最后一步。
+
+      - name: 显示结果
+        run: cat cron.log || true
+
+      - name: 校验授权配置未被构建丢弃
+        run: |
+          python3 - <<'PY'
+          import os, subprocess, sys
+          p = 'dist/单文件版/彩票统计.html'
+          new = open(p, 'rb').read() if os.path.exists(p) else b''
+          new_has = b'var LICENSE = {' in new
+          try:
+              old = subprocess.check_output(
+                  ['git', 'show', 'HEAD:dist/单文件版/彩票统计.html'],
+                  stderr=subprocess.DEVNULL)
+          except Exception:
+              old = b''
+          old_has = b'var LICENSE = {' in old
+          cfg = os.path.exists('license.json')
+          print('仓库 license.json:', '有' if cfg else '无')
+          print('重建产物内嵌授权:', '是' if new_has else '否')
+          print('仓库原产物内嵌授权:', '是' if old_has else '否')
+          if cfg and not new_has:
+              print('::error::仓库有 license.json，但重建产物未内嵌授权配置，'
+                    '请检查 build_single.py 的 load_license()')
+              sys.exit(1)
+          if old_has and not new_has:
+              print('::error::原本发布的产物带授权，重建后授权被丢弃。'
+                    '通常是定时工作流运行时仓库里没有 license.json，'
+                    'CI 重新构建时按未开启授权处理。'
+                    '请把 license.json 提交到仓库根目录后重跑。')
+              sys.exit(1)
+          PY
+
+      - name: 提交更新后的数据
+        if: steps.gen.outputs.changed != '0'
+        run: |
+          git config user.name  "lottery-bot"
+          git config user.email "bot@example.com"
+          git add dist/
+          git diff --staged --quiet || git commit -m "chore(data): 自动刷新开奖数据 $(TZ='Asia/Shanghai' date '+%F %H:%M')"
+          git push
+
+      - name: 触发 Pages 部署
+        if: steps.gen.outputs.changed != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # GITHUB_TOKEN 产生的 push 事件不会创建新的 workflow run，
+          # 但 workflow_dispatch 是例外，用 gh 显式调用即可。
+          gh workflow run deploy-pages.yml --ref main
+          echo "已触发 部署到 GitHub Pages"
+
+      # 公开仓库 60 天无 activity 会被静默禁用定时任务，
+      # 每天留一个 commit 保活；dist/** 已被 paths-ignore 排除，不会循环触发。
+      - name: 心跳提交（保持定时任务不被禁用）
+        if: steps.gen.outputs.changed == '0'
+        run: |
+          git config user.name  "lottery-bot"
+          git config user.email "bot@example.com"
+          mkdir -p dist
+          echo "$(TZ='Asia/Shanghai' date '+%F %H:%M') 数据无变化" > dist/.last-check
+          git add dist/.last-check
+          git diff --staged --quiet || git commit -m "chore: heartbeat $(TZ='Asia/Shanghai' date '+%F %H:%M')"
+          git push
+
+      - name: 判定本次是否失败（任一彩种失败即失败）
+        if: steps.gen.outputs.rc != '0'
+        run: |
+          echo "::error::本次抓取有彩种失败：${{ steps.gen.outputs.failed }}"
+          echo ""
+          echo "排查方向："
+          echo "  1) 看「检查云代理配置与连通性」那一步的 HTTP 状态与响应片段"
+          echo "     - 200 → 云函数正常，多为官方接口临时不可用或返回结构异常"
+          echo "     - 失败 → 云函数地址、函数 URL 权限或云平台侧问题"
+          echo "  2) 看「显示结果」那一步的 [cron] 日志，确认具体报错彩种"
+          exit 1
