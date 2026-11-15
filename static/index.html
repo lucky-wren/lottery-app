@@ -4782,7 +4782,7 @@ function closeSide(){ $('side').className='sidemask'; }
    普通用户只读来源提示，看不到输入框；管理员配置后导出 proxy.json 即可对所有人生效。
    全部状态与内部方法收在 OU 一个对象里，对外只暴露交互所需的桥接函数。 */
 var OU = (function(){
-  var LKEY='lottery_ou_proxy', PKEY='lottery_ou_patch_';
+  var LKEY='lottery_ou_proxy', PKEY='lottery_ou_patch_', UKEY='lottery_ou_upd_';
   var N=30, TIMEOUT=12000, MAXPATCH=400;
   var BUILTIN='@@PX_BUILTIN@@';
   var remote='', remoteAt='', busy=false;
@@ -4981,9 +4981,41 @@ var OU = (function(){
   function patchClear(lot){
     try{
       localStorage.removeItem(PKEY+lot);
+      localStorage.removeItem(UKEY+lot);
       localStorage.removeItem('lcd_'+lot);
       localStorage.removeItem('lcst_'+lot);
     }catch(e){}
+  }
+  /* 北京时间字符串，与 CI 写 buildDate 的格式一致 */
+  function bjTime(t){
+    var x=new Date((t+8*3600)*1000);
+    var p=function(n){ return (n<10?'0':'')+n; };
+    return x.getUTCFullYear()+'-'+p(x.getUTCMonth()+1)+'-'+p(x.getUTCDate())
+      +' '+p(x.getUTCHours())+':'+p(x.getUTCMinutes());
+  }
+  /* 一次成功的手动校验：顶部「数据更新于」与「已 N 天未更新」都读
+     updatedAt，只追加行不改它的话，页面会一直停在构建期旧时间。 */
+  function stampNow(lot){
+    var d=D[lot]; if(!d||!d.rows) return 0;
+    var t=Math.floor(Date.now()/1000);
+    d.updatedAt=t;
+    d.buildDate=bjTime(t);
+    d.count=d.rows.length;
+    d.ouLocal=true;
+    if(d.stale) delete d.stale;
+    try{ localStorage.setItem(UKEY+lot,String(t)); }catch(e){}
+    return t;
+  }
+  /* 刷新页面后数据会从内嵌 / 站点 JSON 重新解析，只重放行会丢掉时间戳，
+     所以单独存一份；仅当比新产物自带的时间更新时才覆盖（CI 重建优先）。 */
+  function replayStamp(lot){
+    var d=D[lot]; if(!d) return;
+    var t=0;
+    try{ t=parseInt(localStorage.getItem(UKEY+lot),10)||0; }catch(e){}
+    if(t<=0 || t<=Number(d.updatedAt||0)) return;
+    d.updatedAt=t; d.buildDate=bjTime(t); d.ouLocal=true;
+    d.count=d.rows.length;
+    if(d.stale) delete d.stale;
   }
   function merge(lot,rows){
     var add=append(D[lot],lot,rows);
@@ -4991,14 +5023,22 @@ var OU = (function(){
     return add.length;
   }
   /* 重放本机新增：页面每次重新加载数据后调用，避免被内嵌数据覆盖。幂等。 */
-  function replay(lot){ return append(D[lot],lot,patchRead(lot)).length; }
+  function replay(lot){
+    var d=D[lot]; if(!d) return 0;
+    var n=append(d,lot,patchRead(lot)).length;
+    d.count=d.rows.length;
+    replayStamp(lot);
+    return n;
+  }
   function fetchOne(lot){
     var d=DEF[lot];
     if(!d) return Promise.resolve({lot:lot,ok:false,code:'UNKNOWN',msg:'未知彩种'});
     if(d.proxy&&!proxy()) return Promise.resolve({lot:lot,ok:false,code:'NO_PROXY',msg:'需配置云代理'});
     return getText(d.url(),d.proxy).then(function(txt){
       var rows=(lot==='dlt'||lot==='pls')?parseTc(txt,lot):parseFc(txt,lot);
-      return {lot:lot,ok:true,add:merge(lot,rows),msg:''};
+      var add=merge(lot,rows);
+      if(rows.length) stampNow(lot);   /* 官方返回有效行 = 校验成功，同步顶部时间 */
+      return {lot:lot,ok:true,add:add,msg:''};
     }).catch(function(e){
       return {lot:lot,ok:false,code:(e&&e.code)||'NETWORK',msg:(e&&e.msg)||String(e)};
     });
@@ -5024,6 +5064,7 @@ var OU = (function(){
     sourceHtml:sourceHtml, getText:getText, validRow:validRow,
     parseTc:parseTc, parseFc:parseFc, append:append, merge:merge, replay:replay,
     patchRead:patchRead, patchSave:patchSave, patchClear:patchClear,
+    stampNow:stampNow, replayStamp:replayStamp, bjTime:bjTime,
     fetchOne:fetchOne, run:run, errText:errText,
     name:function(l){ return DEF[l]?DEF[l].name:l; },
     isBusy:function(){ return busy; }, setBusy:function(v){ busy=!!v; },
@@ -5074,7 +5115,7 @@ function ouSavePx(){
 function ouClearPx(){ OU.setLocal(''); toast('本机代理已清除'); refreshData(); }
 function ouClearPatches(){
   var lots=OU.ORDER, i;
-  for(i=0;i<lots.length;i++) OU.patchClear(lots[i]);
+  for(i=0;i<lots.length;i++){ OU.patchClear(lots[i]); delete D[lots[i]]; }
   /* 单文件版里 EMBEDDED_DATA[lot] 与 D[lot] 是同一个对象，
      清掉本机缓存后还要让 embeddedLoad 重新从 EMBEDDED_SRC 解析，
      否则内存里那份仍带着手动更新的行。 */
@@ -5112,9 +5153,17 @@ function ouGo(mode){
         h+='<div>'+esc(nm)+'：<span style="color:#c33">失败</span> <span style="color:#999;font-size:12px">'+esc(OU.errText(r))+'</span></div>';
       }
     }
-    if(any){ try{ lcWrite(S.lot,D[S.lot]); }catch(e){} }
+    var fresh=0;
+    for(i=0;i<res.length;i++){
+      if(res[i].ok){
+        try{ lcWrite(res[i].lot,D[res[i].lot]); }catch(e){}
+        fresh++;
+      }
+    }
     h+='<div style="margin-top:8px;color:#888;font-size:12px">'
       +'合计新增 '+any+' 期；结果保存在本机，刷新后仍保留。</div>';
+    if(fresh) h+='<div style="color:#1a9c46;font-size:12px">'
+      +'顶部「数据更新于」已同步为本次时间（'+fresh+' 个彩种），并标注「本机」。</div>';
     if(lg) lg.innerHTML=h;
     try{ render(); }catch(e){}
   }).catch(function(e){
@@ -5220,7 +5269,9 @@ var HELP_SECTIONS=[
    +'<li><b>号码没有记忆，历史数据不能预测下一期，也不构成投注建议</b></li></ul>'
    },
  {t:'手动更新', b:
-   '<p>菜单<b>「数据更新」</b>可手动补齐最新开奖结果；新增内容只保存在本机，不影响别人。</p>'
+   '<p>菜单<b>「数据更新」</b>可手动补齐最新开奖结果；新增内容只保存在本机，不影响别人。'
+   +'更新成功后顶部<b>「数据更新于」</b>会同步为本次时间并标注「本机」；'
+   +'点「清除本机新增」即回到页面自带数据的时间。</p>'
   },
  {t:'四种玩法', b:
    '<ul><li><b>双色球</b>：6 红（1-33）＋1 蓝（1-16）</li>'
@@ -5319,7 +5370,7 @@ var HELP_SECTIONS=[
    +'要让<b>所有访客生效</b>需重新发布页面（见部署文档）</li></ul>'
   },
  {t:'顶部信息', b:
-   '<ul><li><b>数据更新于</b>与<b>最新一期</b>显示在顶部；超过 3 天未更新会出现红色提醒</li>'
+   '<ul><li><b>数据更新于</b>与<b>最新一期</b>显示在顶部；手动更新后会同步并标注「本机」；超过 3 天未更新会出现红色提醒</li>'
    +'<li><b>当前时间</b>每秒自动跳动；下方<b>开奖倒计时</b>标注各彩种开奖日与时刻</li>'
    +'<li>激活授权后顶部常驻「授权有效期至 …」，剩余 7 天内变红</li></ul>'
   },
@@ -5388,7 +5439,7 @@ function head(){
   var txt=t?fmtDt(t):((d&&d.buildDate)?String(d.buildDate)
       :((d&&d.rows&&d.rows.length)?String(d.rows[d.rows.length-1][1]):'未知'));
   var s=licTopBar();
-  s+='<div class="upd">数据更新于 '+txt
+  s+='<div class="upd">数据更新于 '+txt+(d&&d.ouLocal?'（本机）':'')
     +' · 当前时间 <span id="nowtm">'+fmtDt(new Date())+'</span></div>';
   /* 数据新鲜度提醒：CI 抓取可能因网络被风控失败，数据会悄悄停在几天前，
      页面上看不出来，所以超过 3 天就明确提示 */
