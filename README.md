@@ -2,7 +2,41 @@
 
 本仓库是一个**自动更新的静态站点**：定时工作流在云端抓取开奖数据，重新生成单文件页面，再由部署工作流发布到 GitHub Pages。页面数据已内嵌在 HTML 里，访客打开即用、不需要联网取数，也不需要任何配置。
 
-访问地址：`https://<用户名>.github.io/<仓库名>/`
+仓库：`https://github.com/lucky-wren/lottery-app`
+
+访问地址：`https://lucky-wren.github.io/lottery-app/`
+
+## 快速开始：一键部署（Windows）
+
+不想装 git、也不想登录 GitHub 网页时，用包里的 `deploy.bat`：
+
+1. 把 `deploy.bat` 和 `deploy.ps1` 放在解压出来的**仓库根目录**（与 `static/`、`dist/`、`.github/` 同级），两个文件必须同目录
+2. 建一个 Token：GitHub → Settings → Developer settings → Personal access tokens
+   - 细粒度 PAT（推荐）：Repository access 只选本仓库；Permissions 勾 `Contents: Read and write`、`Workflows: Read and write`、`Actions: Read and write`
+   - 经典 PAT：勾 `repo` + `workflow`
+3. 双击 `deploy.bat`，在它打开的黑色窗口里粘贴 Token，**输入只显示 `*`**，回车即开始（直接回车＝取消，`Ctrl+C` 退出）。回车后窗口会立刻显示「已读取 Token（N 位），正在校验…」，随后才是网络请求
+4. 脚本自动推送文件并创建一次提交，由 push 事件触发「部署到 GitHub Pages」；约 1~2 分钟后按 `Ctrl+F5` 刷新页面
+
+> 仓库默认分支若不是 `main`，把两个 workflow 里的 `branches: [main]` 改成实际分支名；`deploy.ps1` 会自动跟随仓库返回的默认分支，无需手改。
+>
+> 一键部署会同步 `.github/workflows/` 下两个 yml（内容相同自动跳过）。若仓库里是自行修订的较新版，先把包里的这两个文件换成仓库版本再运行，避免被覆盖。
+
+脚本只推送白名单里的仓库文件（`static/`、`dist/`、`data/`、两个 workflow、构建脚本、文档等），本地不存在的自动跳过；`管理员账号.txt`、`授权码名单.txt`、zip、预览图、测试脚本**不在白名单**。它先比对每个文件的 git blob sha1，内容相同就跳过，重复运行不会产生空提交。用 PAT 提交会正常触发 push 工作流（仓库自带的 `GITHUB_TOKEN` 才会例外）；脚本还会显式触发一次 `deploy-pages.yml` 作为兜底；两者同时发生时 Pages 的 concurrency 会让两次运行排队，属正常。
+
+Token 只在内存中使用，不写文件、不打印、不进提交信息，窗口关闭即消失。建议选 30 天有效期的 Token。
+
+| 提示 | 处理 |
+|---|---|
+| Token 无效或已过期 | 重新生成 |
+| 权限不足 | 补齐 Contents / Workflows / Actions 读写 |
+| 找不到仓库 | 检查仓库名与 PAT 的 Repository access |
+| 当前目录没找到待推送文件 | 脚本放错位置，移到解压根目录 |
+| 未能自动触发部署 | 文件已推送，去 Actions 手动 Run workflow |
+| 仓库分支在部署期间被更新 | 重新运行一次脚本 |
+
+只想推核心五个文件（`static/index.html`、单文件版、`license.json`、两个 workflow）时，运行 `powershell -ExecutionPolicy Bypass -File .\deploy.ps1 -Mode core`；改仓库名或分支可用 `-Owner` / `-Repo` / `-Branch`。
+
+---
 
 ---
 
@@ -30,16 +64,16 @@
 
 ## 二、一次性配置
 
-### 1. 配置仓库 Secret `LOTTERY_PROXY`
+### 1. 云代理地址（默认已内置，Secret 可选）
 
-云函数地址是**唯一需要配置的东西**。
+定时工作流内置了默认云函数地址 `https://1517806777-0ev4r7t333.ap-guangzhou.tencentscf.com`，**不建任何 Secret 也能正常抓取和部署**，不会因「未配置 Secret」而中断。
 
-仓库 → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**：
+如需换成自己的云函数，仓库 → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**：
 
 - Name：`LOTTERY_PROXY`
 - Secret：函数 URL 地址，形如 `https://125xxxxxxx-abcdefgh.ap-guangzhou.tencentscf.com`
 
-末尾**不要带 `?url=`**。云函数的部署步骤见 `云代理部署说明.md`，源码在 `cloud_proxy.py`。
+Secret 有值时优先于内置默认地址；也可直接改 `refresh-data.yml` 里的 `DEFAULT_PROXY`。末尾**不要带 `?url=`**。云函数的部署步骤见 `云代理部署说明.md`，源码在 `cloud_proxy.py`。
 
 ### 2. Pages Source 选 GitHub Actions
 
@@ -98,13 +132,13 @@ GitHub Actions 的 runner 出口 IP 在境外，彩票站按 IP 段风控，直�
 工作流步骤：
 
 1. 拉取代码、配置 Python 3.11、安装 `requirements.txt`
-2. **检查云代理配置与连通性**：Secret 缺失会直接报红；否则请求 `?lot=ssq&n=1` 确认云函数可达
+2. **检查云代理配置与连通性**：打印地址来源（内置默认 / Secret 覆盖），并把最终值写入 `GITHUB_ENV` 供后续步骤使用；请求 `?lot=ssq&n=1` 确认云函数可达。未配置 Secret 不再中断，自检不通只给警告，由后续抓取与 `CHANGED` / `rc` 判定成败
 3. `python3 cron_refresh.py --poll-minutes 12`：按开奖日轮询，直到官方最新期号变化；若仓库里最新一期的开奖日期已经是今天（当期已入库），直接跳过等待，不再重复探测官方接口
 4. 提交 `dist/`；无变化时写一个心跳提交（公开仓库 60 天无 activity 会被静默禁用定时任务）
 5. 用 `gh workflow run deploy-pages.yml` 显式触发部署工作流
 6. 任一彩种抓取失败都让 job 变红，已成功的部分照常写入
 
-`LOTTERY_PROXY` 作为 job 级环境变量注入，同一份值被 `crawler.py`（转发请求）和 `build_single.py`（构建期常量）读取。
+`LOTTERY_PROXY` 作为 job 级环境变量注入（Secret 优先、内置默认地址兜底），同一份值被 `crawler.py`（转发请求）和 `build_single.py`（构建期常量）读取。
 
 ---
 
@@ -175,7 +209,7 @@ refresh-data.yml
 
 | 检查项 | 怎么看 |
 |---|---|
-| Secret 已生效 | 定时工作流「检查云代理配置与连通性」打印 `云函数自检 HTTP 200` |
+| 云代理来源正确 | 定时工作流「检查云代理配置与连通性」打印 `云代理来源：内置默认地址` 或 `仓库 Secret`，并打印 `云函数自检 HTTP 200` |
 | 抓取成功 | 定时工作流日志里四彩种都输出期数与最新期号，且 `CHANGED=yes` 或无变化心跳 |
 | 产物已提交 | 仓库 `dist/单文件版/彩票统计.html` 的提交时间更新 |
 | 部署被触发 | 定时工作流末尾打印 `已触发 部署到 GitHub Pages` |
@@ -191,9 +225,9 @@ refresh-data.yml
 | 现象 | 原因 | 处理 |
 |---|---|---|
 | 页面 404 | Pages Source 选成了分支部署，仓库根目录没有 `index.html` | Source 改成 **GitHub Actions**，手动 Run 一次部署工作流 |
-| 定时工作流报「未配置仓库 Secret LOTTERY_PROXY」 | Secret 没建或名字不一致 | 按第二节重建，名字必须完全一致 |
+| 定时工作流打印「云函数自检未通过」警告 | 默认地址临时不可达、函数 URL 失效或授权类型不对 | 先看日志里的「云代理来源」；浏览器打开根路径看自检 JSON；仍失败则建 Secret 指向自己的函数 |
 | 云函数自检失败 | 地址失效、授权类型不是「开放」、超时过短 | 浏览器打开根路径看自检 JSON，再按云代理部署说明排查 |
-| 抓取返回 403 / 567 | 云函数出口被上游临时限流，或 Secret 指向了境外平台 | 等下一次定时运行；确认云函数在境内云 |
+| 抓取返回 403 / 567 | 云函数出口被上游临时限流，或代理地址指向了境外平台 | 等下一次定时运行；确认云函数在境内云 |
 | 数据没变化但工作流全绿 | 官方还没出新期；或抓取回落到过期缓存 | 看日志里 `CHANGED=` 与每个彩种的期号输出 |
 | 推送失败 `permission denied` | Workflow permissions 是只读 | 改为 **Read and write permissions** |
 | 页面看不到更新 | Service Worker 缓存 | Ctrl+F5，或清站点数据 |
@@ -206,7 +240,7 @@ refresh-data.yml
 
 ## 十、安全
 
-- 云函数地址放在仓库 Secret（CI 抓取）、管理员本机与站点 `proxy.json`（页面手动更新）里，不写死在源码；产物内置常量只作兜底
+- 定时抓取的云函数地址默认写在 `refresh-data.yml`（公开仓库可见，可用 Secret `LOTTERY_PROXY` 覆盖）；页面手动更新仍按「管理员本机 → 站点 `proxy.json` → 构建期 `PX_BUILTIN`」回落，产物不硬编码地址
 - 云函数「授权类型 = 开放」意味着任何人可匿名调用，真正的防线是 `cloud_proxy.py` 里的域名白名单，不是 URL 保密
 - **含明文的文件不要提交**：`管理员账号.txt`（明文密码）、`授权码名单.txt`（明文授权码）、改密备忘。`lottery-app.zip` 是本地工程包，别整体传到公开仓库
 - **`license.json` 必须提交到仓库根目录**：它只含 `salt`、授权码散列、`admin.hash`、有效期，不含任何明文；这些内容构建时本来就要内嵌进公开页面。定时工作流每次重建产物时都会重新读它，仓库里缺了文件，重建出的页面 `LICENSE = null`，管理员与访问授权入口会一起消失

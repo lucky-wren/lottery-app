@@ -293,7 +293,7 @@ def main():
     }
 
     import crawler
-    log("云端抓取通道: %s" % ("境内云函数（Secret LOTTERY_PROXY）" if crawler.PROXY_URL
+    log("云端抓取通道: %s" % ("境内云函数（LOTTERY_PROXY）" if crawler.PROXY_URL
                               else "直连（未配置 LOTTERY_PROXY）"))
     seed_cache(crawler)
     ok = 0

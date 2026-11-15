@@ -1,7 +1,7 @@
 name: 部署到 GitHub Pages
 
 # 把 dist/单文件版/彩票统计.html 发布成 index.html。
-# 访问地址：https://<用户名>.github.io/<仓库名>/
+# 访问地址：https://lucky-wren.github.io/lottery-app/
 #
 # 触发时机：
 #   1. 定时抓取工作流提交了更新后的单文件版

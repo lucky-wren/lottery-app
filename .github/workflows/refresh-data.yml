@@ -6,7 +6,10 @@ name: 定时刷新彩票数据
 # 不能依赖 dist/单文件版/** 的 push 事件来部署。
 #
 # 官方接口统一经境内云函数转发，避免 GitHub runner 的境外出口 IP
-# 被彩票站按段风控（403 / 567）。云函数地址放在仓库 Secret LOTTERY_PROXY。
+# 被彩票站按段风控（403 / 567）。
+# 云函数地址：下方「检查云代理配置与连通性」里的 DEFAULT_PROXY 为内置默认值，
+# 仓库 Secret LOTTERY_PROXY 有值时优先覆盖。两者都无需强制配置，
+# 不会因「未配置 Secret」而中断部署。
 #
 # cron 用 UTC（北京 = UTC+8）：北京 21:43 → UTC 13:43，次日 09:13 → UTC 01:13。
 # 分钟数避开整点，减少 GitHub 高负载期的排队延迟。
@@ -42,6 +45,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
+      # Secret 可选；留空时由下面的检查步骤回退到内置默认地址并写入 GITHUB_ENV。
       LOTTERY_PROXY: ${{ secrets.LOTTERY_PROXY }}
     steps:
       - name: 拉取代码
@@ -60,11 +64,19 @@ jobs:
 
       - name: 检查云代理配置与连通性
         run: |
+          # 内置默认地址：换自己的云函数时，改这一行，或建同名 Secret 覆盖。
+          DEFAULT_PROXY='https://1517806777-0ev4r7t333.ap-guangzhou.tencentscf.com'
           if [ -z "$LOTTERY_PROXY" ]; then
-            echo "::error::未配置仓库 Secret LOTTERY_PROXY（境内云函数地址）"
-            echo "Settings → Secrets and variables → Actions → New repository secret"
-            exit 1
+            LOTTERY_PROXY="$DEFAULT_PROXY"
           fi
+          if [ "$LOTTERY_PROXY" = "$DEFAULT_PROXY" ]; then
+            echo "云代理来源：内置默认地址（仓库未配置 Secret LOTTERY_PROXY）"
+          else
+            echo "云代理来源：仓库 Secret LOTTERY_PROXY（已覆盖内置默认地址）"
+          fi
+          # 让本步骤的 python 与后续所有步骤都拿到同一个值
+          export LOTTERY_PROXY
+          echo "LOTTERY_PROXY=$LOTTERY_PROXY" >> "$GITHUB_ENV"
           python3 - <<'PY'
           import os, urllib.request
           p = os.environ['LOTTERY_PROXY'].strip()
@@ -75,8 +87,9 @@ jobs:
               body = r.read(160).decode('utf-8', 'ignore')
               print('云函数自检 HTTP', r.status, '响应片段:', body)
           except Exception as e:
-              print('::error::云函数不可达:', e)
-              raise SystemExit(1)
+              # 不阻断：抓取脚本会自行处理失败并保护已有数据，
+              # 最终由最后一步按 rc 判红，不会静默全绿。
+              print('::warning::云函数自检未通过，仍按该地址继续抓取：', e)
           PY
 
       - name: 打印触发来源与时间
@@ -149,7 +162,8 @@ jobs:
         run: |
           # GITHUB_TOKEN 产生的 push 事件不会创建新的 workflow run，
           # 但 workflow_dispatch 是例外，用 gh 显式调用即可。
-          gh workflow run deploy-pages.yml --ref main
+          # 用 github.ref_name 跟随实际默认分支，不写死 main。
+          gh workflow run deploy-pages.yml --ref "${{ github.ref_name }}"
           echo "已触发 部署到 GitHub Pages"
 
       # 公开仓库 60 天无 activity 会被静默禁用定时任务，
@@ -171,7 +185,7 @@ jobs:
           echo "::error::本次抓取有彩种失败：${{ steps.gen.outputs.failed }}"
           echo ""
           echo "排查方向："
-          echo "  1) 看「检查云代理配置与连通性」那一步的 HTTP 状态与响应片段"
+          echo "  1) 看「检查云代理配置与连通性」打印的云代理来源与 HTTP 状态"
           echo "     - 200 → 云函数正常，多为官方接口临时不可用或返回结构异常"
           echo "     - 失败 → 云函数地址、函数 URL 权限或云平台侧问题"
           echo "  2) 看「显示结果」那一步的 [cron] 日志，确认具体报错彩种"
