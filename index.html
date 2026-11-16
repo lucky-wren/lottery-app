@@ -1568,7 +1568,7 @@ var S = {noApi:STATIC_BUILD, lot:'ssq', tab:'hist',
   fSort:{all:{k:1,dir:1}},
   /* 蓝球分析：综合评分的排序条件，默认出现次数升序（次数少的号在前） */
   blueSorts:[{k:'cnt',dir:1}],
-  heatSort:'num',
+  heatSort:'cnt',
   pickRed:[], pickBlue:[],
   /* 中奖核对 */
   chkRed:[], chkBlue:[], chkMode:'latest', chkIssue:'',
@@ -2224,42 +2224,68 @@ function heatColor(z){
   if(z<1.5)   return '#ee9182';
   return '#d63a2a';
 }
+/* 按出现次数分位上色：次数最少=冷蓝，最多=热红，保证「排列=颜色=冷到热」单调 */
+function heatColorRank(cnt,lo,hi){
+  var t=(hi>lo)?(cnt-lo)/(hi-lo):0.5;
+  if(t<0.2) return '#3b6fd4';
+  if(t<0.4) return '#8ab0e8';
+  if(t<0.6) return '#9aa7b6';
+  if(t<0.8) return '#ee9182';
+  return '#d63a2a';
+}
+function heatMode(){ return (S.heatSort==='heat'||S.heatSort==='num')?S.heatSort:'cnt'; }
+function heatSortArr(arr,mode){
+  if(mode==='heat') return arr.sort(function(a,b){return a.z-b.z||a.num-b.num});
+  if(mode==='num')  return arr.sort(function(a,b){return a.num-b.num});
+  return arr.sort(function(a,b){return a.cnt-b.cnt||a.num-b.num});
+}
+function heatSeg(){
+  return '<div class="seg">'
+   +'<button class="'+(heatMode()==='cnt'?'on':'')+'" onclick="S.heatSort=\'cnt\';render()">按次数</button>'
+   +'<button class="'+(heatMode()==='heat'?'on':'')+'" onclick="S.heatSort=\'heat\';render()">按冷热（校正）</button>'
+   +'<button class="'+(heatMode()==='num'?'on':'')+'" onclick="S.heatSort=\'num\';render()">按号码</button>'
+   +'</div>';
+}
 function renderHeat(){
   var sc=scopeRows(statWinGet());
   if(!sc.rows.length) return '<div class="empty">所选窗口内没有数据</div>';
-  var h='<div class="bar">'
-   +'<div class="seg"><button class="'+(S.heatSort==='num'?'on':'')+'" onclick="S.heatSort=\'num\';render()">按号码</button>'
-   +'<button class="'+(S.heatSort==='heat'?'on':'')+'" onclick="S.heatSort=\'heat\';render()">按冷热</button></div>'
-   +'</div>';
+  var h='<div class="bar">'+heatSeg()+'</div>';
   h+=heatBlock(statRangeLabel());
   h+='<div class="lgd"><span class="lgb" style="background:#3b6fd4"></span>极冷'
     +'<span class="lgb" style="background:#8ab0e8;margin-left:6px"></span>偏冷'
     +'<span class="lgb" style="background:#9aa7b6;margin-left:6px"></span>正常'
     +'<span class="lgb" style="background:#ee9182;margin-left:6px"></span>偏热'
     +'<span class="lgb" style="background:#d63a2a;margin-left:6px"></span>极热</div>';
-  h+='<div class="note">格内为「号码 / 该窗口出现次数」。不区分'+esc(D[S.lot].redLabel)
+  h+='<div class="note">格内为「号码 / 该窗口出现次数」，不分'+esc(D[S.lot].redLabel)
     +' / '+esc(D[S.lot].blueLabel)+'，全部号码合并统计。<br>'
-    +'冷热按<b>每个号码自身的理论出现次数</b>（两个区概率之和）与标准差判定，'
-    +'仅反映已开奖结果，无预测能力。窗口越小样本越少，冷热波动越大。</div>';
+    +'<b>按次数</b>（默认）就是出现次数从少到多，颜色也由蓝到红，即冷→热。'
+    +'注意 <b>01-16 既是主区号又是'+esc(D[S.lot].blueLabel)+'号</b>，每期可能被抽两次，'
+    +'次数天生比后面的号高约 1/3，所以大多排在末尾——这是口径造成的，不是更热。<br>'
+    +'<b>按冷热（校正）</b>先扣掉每个号「自己该出多少次」再比，次数多的也可能算冷；'
+    +'<b>按号码</b>只是 1→'+statNumMax()+' 顺看。<br>'
+    +'仅反映已开奖结果，无预测能力；窗口越小波动越大。</div>';
   return h;
 }
 function heatBlock(title){
-  var rows=heatData(), arr=rows.slice();
-  if(S.heatSort==='heat') arr.sort(function(a,b){return a.z-b.z});
-  else arr.sort(function(a,b){return a.num-b.num});
+  var rows=heatData(), arr=rows.slice(), mode=heatMode();
+  var lo=Math.min.apply(null,rows.map(function(r){return r.cnt}));
+  var hi=Math.max.apply(null,rows.map(function(r){return r.cnt}));
+  heatSortArr(arr,mode);
+  var col=(mode==='heat')?function(r){return heatColor(r.z)}:function(r){return heatColorRank(r.cnt,lo,hi)};
+  var key=(mode==='heat')?'z':'cnt';
   var h='<div class="sec">'+title+'</div><div class="heatgrid">';
   for(var i=0;i<arr.length;i++){
     var r=arr[i];
-    h+='<div class="hcell" style="background:'+heatColor(r.z)+'">'
+    h+='<div class="hcell" style="background:'+col(r)+'">'
       +'<div class="hn">'+pad(r.num)+'</div><div class="hc">'+r.cnt+'次</div></div>';
   }
   h+='</div>';
-  var hot=rows.slice().sort(function(a,b){return b.z-a.z}).slice(0,3);
-  var cold=rows.slice().sort(function(a,b){return a.z-b.z}).slice(0,3);
+  var hot=rows.slice().sort(function(a,b){return b[key]-a[key]||a.num-b.num}).slice(0,3);
+  var cold=rows.slice().sort(function(a,b){return a[key]-b[key]||a.num-b.num}).slice(0,3);
   h+='<div class="toprow"><span style="color:var(--fg6)">最热</span>';
-  hot.forEach(function(r){ h+='<span class="chip" style="background:'+heatColor(r.z)+'">'+pad(r.num)+' '+r.cnt+'次</span>'; });
+  hot.forEach(function(r){ h+='<span class="chip" style="background:'+col(r)+'">'+pad(r.num)+' '+r.cnt+'次</span>'; });
   h+='</div><div class="toprow"><span style="color:var(--fg6)">最冷</span>';
-  cold.forEach(function(r){ h+='<span class="chip" style="background:'+heatColor(r.z)+'">'+pad(r.num)+' '+r.cnt+'次</span>'; });
+  cold.forEach(function(r){ h+='<span class="chip" style="background:'+col(r)+'">'+pad(r.num)+' '+r.cnt+'次</span>'; });
   h+='</div>';
   return h;
 }
@@ -5293,7 +5319,7 @@ var HELP_SECTIONS=[
  {t:'号码统计', b:
    '<ul><li>四个视图：<b>出现次数</b>（表格）、<b>冷热分布</b>（色块）、<b>遗漏排行</b>（按当前遗漏降序）、<b>重号 / 连号 / 同尾</b>，窗口下拉共用</li>'
    +'<li><b>不区分红球 / 蓝球</b>：每期开出的全部号码合并统计，只看号码本身</li>'
-   +'<li>冷热按每个号码自身的理论出现次数判定；1-16 同时属于两个区，已单独修正</li>'
+   +'<li><b>冷热分布</b>默认<b>按次数</b>：出现次数从少到多＝冷→热，颜色同步；可切「按冷热」（扣掉各号理论次数后的偏离，1-16 双重身份已修正）或「按号码」</li>'
    +'<li>窗口可选近一个月 / 近一年 / 全部历史；点表头切换排序</li>'
    +'<li>遗漏 ≥30 期标红；<b>遗漏再大也不会「补偿性」开出</b></li>'
    +'<li>按位玩法按<b>百 / 十 / 个位</b>分别统计</li></ul>'
@@ -5697,30 +5723,29 @@ function sortFreq3(p,k){
 function renderHeat3(){
   var d=D[S.lot], sc=scopeRows(statWinGet()), rows=sc.rows, N=rows.length;
   if(!N) return '<div class="empty">所选窗口内没有数据</div>';
-  var h='<div class="bar">'
-   +'<div class="seg"><button class="'+(S.heatSort==='num'?'on':'')+'" onclick="S.heatSort=\'num\';render()">按号码</button>'
-   +'<button class="'+(S.heatSort==='heat'?'on':'')+'" onclick="S.heatSort=\'heat\';render()">按冷热</button></div>'
-   +'</div>';
+  var h='<div class="bar">'+heatSeg()+'</div>';
   var exp=N/10, sd=Math.sqrt(N*0.1*0.9)||1;
   for(var p=0;p<3;p++){
     var cnt=posCnt(rows,p), arr=[];
     for(var n=0;n<=9;n++) arr.push({num:n, cnt:cnt[n], z:(cnt[n]-exp)/sd});
-    /* 与双色球一致：按号码 0-9，或按冷热（冷→热） */
-    if(S.heatSort==='heat') arr.sort(function(a,b){return a.z-b.z});
-    else arr.sort(function(a,b){return a.num-b.num});
+    var mode=heatMode(), lo=Math.min.apply(null,arr.map(function(r){return r.cnt}));
+    var hi=Math.max.apply(null,arr.map(function(r){return r.cnt}));
+    heatSortArr(arr,mode);
+    var col=(mode==='heat')?function(r){return heatColor(r.z)}:function(r){return heatColorRank(r.cnt,lo,hi)};
+    var key=(mode==='heat')?'z':'cnt';
     h+='<div class="sec">'+(d.posLabels?d.posLabels[p]:('第'+(p+1)+'位'))+'（0-9）</div><div class="heatgrid">';
     for(var i=0;i<arr.length;i++){
-      h+='<div class="hcell" style="background:'+heatColor(arr[i].z)+'">'
+      h+='<div class="hcell" style="background:'+col(arr[i])+'">'
         +'<div class="hn">'+arr[i].num+'</div><div class="hc">'+arr[i].cnt+'次</div></div>';
     }
     h+='</div>';
     /* 该位最热 / 最冷 */
-    var hot=arr.slice().sort(function(a,b){return b.z-a.z}).slice(0,3);
-    var cold=arr.slice().sort(function(a,b){return a.z-b.z}).slice(0,3);
+    var hot=arr.slice().sort(function(a,b){return b[key]-a[key]||a.num-b.num}).slice(0,3);
+    var cold=arr.slice().sort(function(a,b){return a[key]-b[key]||a.num-b.num}).slice(0,3);
     h+='<div class="toprow"><span style="color:#888">最热</span>';
-    hot.forEach(function(r){ h+='<span class="chip" style="background:'+heatColor(r.z)+'">'+r.num+' '+r.cnt+'次</span>'; });
+    hot.forEach(function(r){ h+='<span class="chip" style="background:'+col(r)+'">'+r.num+' '+r.cnt+'次</span>'; });
     h+='</div><div class="toprow"><span style="color:#888">最冷</span>';
-    cold.forEach(function(r){ h+='<span class="chip" style="background:'+heatColor(r.z)+'">'+r.num+' '+r.cnt+'次</span>'; });
+    cold.forEach(function(r){ h+='<span class="chip" style="background:'+col(r)+'">'+r.num+' '+r.cnt+'次</span>'; });
     h+='</div>';
   }
   h+='<div class="lgd"><span class="lgb" style="background:#3b6fd4"></span>极冷'
@@ -5728,8 +5753,8 @@ function renderHeat3(){
     +'<span class="lgb" style="background:#b0b0b0;margin-left:6px"></span>正常'
     +'<span class="lgb" style="background:#ee9182;margin-left:6px"></span>偏热'
     +'<span class="lgb" style="background:#d63a2a;margin-left:6px"></span>极热</div>';
-  h+='<div class="note">每位每期出现某数字的理论概率为 10%，冷热按偏离理论次数的标准差判定，'
-    +'仅反映已开奖结果，无预测能力。</div>';
+  h+='<div class="note">每位每期出现某数字的概率都是 10%，所以「按次数」和「按冷热」顺序一致；'
+    +'颜色按该位次数从少到多由蓝到红。仅反映已开奖结果，无预测能力。</div>';
   return h;
 }
 
